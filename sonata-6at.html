@@ -369,7 +369,7 @@
 
       <div class="card" id="trans3d">
         <h2 style="margin:0 0 4px">변속기 단면 3D (실물 근사)</h2>
-        <p class="gt-sub">A6 계열 6단 자동변속기의 공개 단면도 배치를 참고해 만든 근사 모델입니다. 비스듬한 이의 헬리컬 기어, 마찰판과 강철판이 번갈아 쌓인 클러치 팩, 앞쪽 아래 1/4을 잘라 낸 알루미늄 케이스로 만들었습니다. 잇수와 치수는 공개되지 않아 가상 값이고, 움직임은 아래 원리 모델과 같습니다.</p>
+        <p class="gt-sub">A6 계열 6단 자동변속기의 공개 단면도 배치를 참고해 만든 근사 모델입니다. 비스듬한 이의 헬리컬 기어, 마찰판과 강철판이 번갈아 쌓인 클러치 팩, 절반을 잘라 낸 알루미늄 케이스로 만들었습니다. 앞쪽에는 토크 컨버터, 아래 옆에는 트랜스퍼 기어와 종감속·차동기어가 붙어 있습니다. 잇수와 치수는 공개되지 않아 가상 값이고, 움직임은 아래 원리 모델과 같습니다.</p>
         <div class="trans-box"><div id="boxT"></div></div>
         <div class="row2"><button class="qb" type="button" data-tcam="front">정면</button><button class="qb" type="button" data-tcam="oblique">비스듬히</button><button class="qb" type="button" data-tcam="side">옆</button></div>
         <div class="trans-opts">
@@ -377,7 +377,7 @@
           <div class="seg two" id="colSeg" role="radiogroup" aria-label="색 보기"></div>
           <button class="qb" type="button" id="labelBtn" aria-pressed="true">이름표</button>
         </div>
-        <p class="hint3">앞(엔진 쪽)부터 입력축·오일 펌프 → 앞 유성기어 → UD 클러치 → 출력 기어 → 뒤 라비뇨 유성기어 → L&amp;R·2-6 브레이크(바깥, 케이스에 고정) → OD·3-5/R 클러치(맨 뒤, 입력 드럼 안) 순서입니다. 접합한 클러치의 마찰판은 초록, 브레이크는 빨강으로 빛나고 판 사이 틈이 닫힙니다. 끌어서 돌리고(휴대폰은 두 손가락) 휠·벌리기로 확대합니다.</p>
+        <p class="hint3">앞(엔진 쪽)부터 토크 컨버터(커버·펌프는 엔진 속도, 터빈은 입력축 속도, 가운데 스테이터, 맨 앞 록업 클러치) → 오일 펌프 → 앞 유성기어 → UD 클러치 → 출력 기어 → 뒤 라비뇨 유성기어 → L&amp;R·2-6 브레이크(바깥, 케이스에 고정) → OD·3-5/R 클러치(맨 뒤, 입력 드럼 안) 순서입니다. 출력 기어의 힘은 트랜스퍼 기어 → 종감속 피니언 → 차동기어 링기어로 내려가 구동축으로 나갑니다(감속비 110/124 × 79/20 = 3.504). 접합한 클러치의 마찰판은 초록, 브레이크는 빨강으로 빛나고 판 사이 틈이 닫힙니다. 끌어서 돌리고(휴대폰은 두 손가락) 휠·벌리기로 확대합니다.</p>
         <p class="lab-msg" id="msgT" aria-live="polite"></p>
       </div>
 
@@ -1578,7 +1578,10 @@ function tube(T3, r, z0, z1, mat, open) {                  // z축 방향 원통
   const m = new T3.Mesh(new T3.CylinderGeometry(r, r, z1 - z0, 32, 1, !!open), mat); m.rotation.x = Math.PI / 2; m.position.z = (z0 + z1) / 2; return m;
 }
 // 배치(z): 오일 펌프 → 앞 유성기어 → UD → 뒤 라비뇨(+출력 기어) → L&R·2-6 브레이크 → OD·3-5/R 클러치
-const TL = { pump: -68, front: -54, UD: -38, out: -19, rear: 0, LR: 17, B26: 30, OD: 41, R35: 52, end: 61 };
+const TL = { lock: -107, tc: -90, pump: -68, front: -54, UD: -38, out: -19, rear: 0, LR: 17, B26: 30, OD: 41, R35: 52, end: 61, diff: -45 };
+// 트랜스퍼 기어 축(cx, cy)과 차동기어 축(dx, dy): 출력 기어(r 62)–트랜스퍼(r 55) 중심거리 117, 종감속 피니언(r 10)–링(r 39.5) 49.5
+// 카메라 쪽(−x)에 두어 비스듬히 볼 때 가려지지 않게 한다. 출력 기어→바퀴 감속비 = 110/124 × 79/20 = 3.504(공식 종감속 3.510)
+const TD = (() => { const cx = -110, cy = Math.sqrt(117 * 117 - 110 * 110), dx = cx - 49.5 * 0.8, dy = cy + 49.5 * 0.6; return { cx, cy, dx, dy }; })();
 const TPACKS = [
   { id: 'UD', z: TL.UD, ro: 30, ri: 20, kind: 'clutch', label: 'UD', drum: 'thC', hub: 'th1' },
   { id: 'LR', z: TL.LR, ro: 64, ri: 50, kind: 'brake', label: 'L&R', drum: null, hub: 'thCR' },
@@ -1606,11 +1609,12 @@ function setTransColors() {
   M.ringF.color.set(real ? 0x8f949b : '#7d8086');
   TR.obj.clips.forEach(([b, m]) => { if (m !== TR.obj.packs.find(P => P.fm === m)?.fm) { m.color.copy(b.color); m.metalness = b.metalness; m.roughness = b.roughness; } });
 }
-// 단면 모드에서는 드럼·판·케이스 같은 껍데기를 앞쪽 아래 1/4(x<0, y<0)만큼 잘라 안을 보인다. 기어는 자르지 않는다
-let TCLIP = null;
+// 단면 모드에서는 드럼·판·케이스 같은 껍데기를 카메라 쪽 절반(x<0)만큼 잘라 안을 보인다. 기어는 자르지 않는다
+let TCLIP = null, TCLIP_D = null;
 function buildTrans(ctl) {
   const T3 = THREE, g = ctl.group, M = transMats(T3), o = { M, packs: [], fp: [], rp: [], clips: [] };
-  if (!TCLIP) TCLIP = [new T3.Plane(new T3.Vector3(1, 0, 0), 0), new T3.Plane(new T3.Vector3(0, 1, 0), 0)];
+  if (!TCLIP) TCLIP = [new T3.Plane(new T3.Vector3(1, 0, 0), 0)];
+  TCLIP_D = [new T3.Plane(new T3.Vector3(1, 0, 0), -TD.dx)];   // 차동기어 케이스용
   ctl.renderer.localClippingEnabled = true;
   const C = base => { const m = base.clone(); m.side = T3.DoubleSide; m.clipIntersection = true; o.clips.push([base, m]); return m; };
   // 금속이 비치도록 간단한 환경맵(위는 밝고 아래는 어두운 방)
@@ -1625,7 +1629,7 @@ function buildTrans(ctl) {
   const add = (m, parent) => { (parent || g).add(m); return m; };
   // 입력축(앞 유성기어 선기어, OD·3-5/R 드럼과 연결)
   o.inShaft = add(new T3.Group());
-  o.inShaft.add(tube(T3, 3.2, TL.pump - 8, TL.end + 2, M.shaft));
+  o.inShaft.add(tube(T3, 3.2, -104, TL.end + 2, M.shaft));
   for (let i = 0; i < 12; i++) { const s = new T3.Mesh(new T3.BoxGeometry(0.7, 0.5, 10), M.shaft); const a = i * TAU / 12; s.position.set(Math.cos(a) * 3.3, Math.sin(a) * 3.3, TL.pump - 4); s.rotation.z = a; o.inShaft.add(s); }   // 스플라인
   // 오일 펌프(고정): 하우징 + 안쪽 기어
   add(new T3.Mesh(annulus(T3, 40, 4.5, 6), C(M.alu))).position.z = TL.pump;
@@ -1707,17 +1711,82 @@ function buildTrans(ctl) {
     P.label = transLabel(pk.label); g.add(P.label); placeLabel(P.label, pk.ro, pk.z, g);
     o.packs.push(P);
   });
+  // ---- 토크 컨버터(앞, 엔진 쪽): 커버·펌프는 엔진과, 터빈은 입력축과 함께 돈다. 스테이터는 원웨이 클러치 위 ----
+  { const lz = (pts, mat, segs) => { const v = pts.map(([r, z]) => new T3.Vector2(r, z)); const lg = new T3.LatheGeometry(v, segs || 72); lg.rotateX(Math.PI / 2); return new T3.Mesh(lg, mat); };
+    const shell = (pts, th) => pts.concat(pts.slice().reverse().map(([r, z]) => [r + th * 0.7, z + (z < TL.tc ? -th : th)]));
+    o.tcEng = add(new T3.Group()); o.tcTurb = add(new T3.Group()); o.tcStat = add(new T3.Group()); o.tcLock = add(new T3.Group());
+    const cov = C(M.steel), pumpM = C(M.in), turbM = C(M.s2), statM = M.dark, vaneM = M.steel;
+    // 커버(앞 껍데기)와 펌프 껍데기(뒤): 엔진 속도
+    o.tcEng.add(lz(shell([[9, -114], [56, -114], [70, -111], [78, -104], [80, -96], [80, -90]], 2), cov));
+    o.tcEng.add(lz(shell([[80, -90], [78, -83], [70, -78], [54, -75.5], [16, -75]], 2), pumpM));
+    o.tcEng.add(tube(T3, 8.5, -75, TL.pump - 2, pumpM));                                       // 펌프 허브 → 오일 펌프 구동
+    for (let i = 0; i < 6; i++) { const b = new T3.Mesh(new T3.CylinderGeometry(2.2, 2.2, 4, 10), cov), a = i * TAU / 6; b.rotation.x = Math.PI / 2; b.position.set(Math.cos(a) * 64, Math.sin(a) * 64, -117); o.tcEng.add(b); }  // 플렉스플레이트 볼트
+    // 날개: 펌프(뒤쪽 반원), 터빈(앞쪽 반원). 반지름 방향 판을 조금 기울여 배치
+    const vane = (z0, z1, r0, r1, n, tilt, mat, grp) => { const geo = new T3.BoxGeometry(r1 - r0, 0.35, z1 - z0);
+      for (let i = 0; i < n; i++) { const m = new T3.Mesh(geo, mat), a = i * TAU / n; m.position.set(Math.cos(a) * (r0 + r1) / 2, Math.sin(a) * (r0 + r1) / 2, (z0 + z1) / 2); m.rotation.set(0, 0, a + tilt); grp.add(m); } };
+    vane(-87, -80, 48, 75, 30, 0.18, vaneM, o.tcEng);
+    o.tcTurb.add(lz(shell([[76, -95], [72, -101], [58, -104], [34, -104], [26, -101]], 1.6), turbM));
+    vane(-101, -94, 44, 74, 28, -0.18, M.dark, o.tcTurb);
+    o.tcTurb.add(tube(T3, 4.2, -104, -76, turbM));                                            // 터빈 허브 → 입력축 스플라인
+    put(o.tcTurb, new T3.Mesh(annulus(T3, 26, 4.2, 2), turbM), -102);
+    // 스테이터: 펌프와 터빈 사이 안쪽, 원웨이 클러치로 한쪽으로만 돈다
+    put(o.tcStat, new T3.Mesh(annulus(T3, 40, 26, 6), statM), -90);
+    vane(-93, -87, 26, 40, 14, 0.8, statM, o.tcStat);
+    add(tube(T3, 6.5, -88, -72, M.dark));                                                    // 스테이터 지지축(고정)
+    // 록업 클러치: 터빈과 함께 도는 피스톤 판, 붙으면 커버에 밀착
+    o.lockFric = C(M.fric());
+    o.tcLock.add(new T3.Mesh(annulus(T3, 70, 12, 1.4), turbM));
+    put(o.tcLock, new T3.Mesh(annulus(T3, 70, 52, 0.9), o.lockFric), -0.9);
+    o.lockGap = 2;
+  }
+  // ---- 트랜스퍼 기어 → 종감속 기어 → 차동기어 → 구동축 ----
+  { const Zo = 124, Zd = 110, Zp = 20, Zr = 79, aC = Math.atan2(TD.cy, TD.cx);
+    o.cs = add(new T3.Group()); o.cs.position.set(TD.cx, TD.cy, 0);
+    o.csDriven = new T3.Mesh(helGear(T3, Zd, Zd / 2, 7, 1, false, 0, 5), M.ring); o.csDriven.position.z = TL.out; o.cs.add(o.csDriven);
+    o.csPin = new T3.Mesh(helGear(T3, Zp, Zp / 2, 9, 1, false, 0, 3), M.ring); o.csPin.position.z = TL.diff; o.cs.add(o.csPin);
+    o.cs.add(tube(T3, 5, TL.diff - 6, TL.out + 5, M.shaft));
+    o.df = add(new T3.Group()); o.df.position.set(TD.dx, TD.dy, 0);
+    o.dfRing = new T3.Mesh(helGear(T3, Zr, Zr / 2, 9, -1, false, 0, 22), M.ring); o.dfRing.position.z = TL.diff; o.df.add(o.dfRing);
+    // 차동기어 케이스(단면에서는 카메라 쪽 1/4을 잘라 안을 보인다)
+    const dcM = C(M.dark); o.dcM = dcM;
+    [-1, 1].forEach(sd => {                                      // 링기어 양쪽의 종 모양 케이스 두 짝
+      const dpts = [[22, 4.5], [24, 12], [20, 20], [8, 24], [8, 30]].map(([r, z]) => new T3.Vector2(r, TL.diff + sd * z));
+      const dl = new T3.LatheGeometry(sd > 0 ? dpts : dpts.reverse(), 48); dl.rotateX(Math.PI / 2); o.df.add(new T3.Mesh(dl, dcM)); });
+    // 베벨 기어: 원뿔에 이 모양 주름을 준다
+    const bevel = (Z, r0, r1, h) => { const gg = new T3.CylinderGeometry(r0, r1, h, Z * 2, 1); const P = gg.attributes.position;
+      for (let i = 0; i < P.count; i++) { const x = P.getX(i), z = P.getZ(i), r = Math.hypot(x, z); if (r < 0.01) continue; const a = Math.atan2(z, x), k = Math.round(a / (TAU / (Z * 2))) % 2 ? 0.9 : 1.04; P.setX(i, x * k); P.setZ(i, z * k); }
+      gg.computeVertexNormals(); return gg; };
+    o.sideL = new T3.Group(); o.sideR = new T3.Group(); o.df.add(o.sideL); o.df.add(o.sideR);
+    const sg = bevel(16, 9, 15, 6); sg.rotateX(Math.PI / 2);
+    const sL = new T3.Mesh(sg, M.steel); sL.position.z = TL.diff - 11; o.sideL.add(sL);
+    const sR = new T3.Mesh(sg.clone().rotateX(Math.PI), M.steel); sR.position.z = TL.diff + 11; o.sideR.add(sR);
+    o.cross = new T3.Group(); o.cross.position.z = TL.diff; o.df.add(o.cross);
+    const pinX = new T3.Mesh(new T3.CylinderGeometry(1.8, 1.8, 40, 12), M.shaft); o.cross.add(pinX);   // 십자축(케이스와 함께 돈다)
+    const pg = bevel(10, 5, 9, 5);
+    o.dpins = [-1, 1].map(s => { const m = new T3.Mesh(pg, M.steel); m.position.y = s * 13; if (s > 0) m.rotation.z = Math.PI; o.cross.add(m); return m; });   // 좁은 쪽이 가운데를 향함
+    // 구동축(왼쪽·오른쪽 바퀴로)과 등속 조인트
+    [[TL.diff - 12, -150, o.sideL], [TL.diff + 12, 95, o.sideR]].forEach(([z0, z1, grp]) => {
+      grp.add(tube(T3, 3.4, Math.min(z0, z1), Math.max(z0, z1), M.shaft));
+      const j = new T3.Mesh(new T3.SphereGeometry(8, 20, 14), M.dark); j.position.z = z1; grp.add(j);
+      for (let k = 0; k < 6; k++) { const s = new T3.Mesh(new T3.BoxGeometry(1.2, 0.8, 10), M.shaft), a = k * TAU / 6; s.position.set(Math.cos(a) * 3.6, Math.sin(a) * 3.6, z1 + (z1 > 0 ? -12 : 12)); s.rotation.z = a; grp.add(s); }   // 스플라인
+    });
+    o.gear = { Zo, Zd, Zp, Zr, aC, aD: Math.atan2(TD.dy - TD.cy, TD.dx - TD.cx) };
+  }
   // 그 밖의 이름표
-  [['오일 펌프', TL.pump, 40], ['앞 유성기어', TL.front, PG.Zr / 2 + 4], ['라비뇨 유성기어', TL.rear + 3, PG.ZR / 2 + 3.5], ['출력 기어', TL.out, 63], ['입력축', TL.pump - 12, 3.4]].forEach(([t, z, r]) => {
+  [['록업 클러치', TL.lock, 70], ['토크 컨버터', TL.tc, 80], ['오일 펌프', TL.pump, 40], ['앞 유성기어', TL.front, PG.Zr / 2 + 4], ['라비뇨 유성기어', TL.rear + 3, PG.ZR / 2 + 3.5], ['출력 기어', TL.out, 63]].forEach(([t, z, r]) => {
     const sp = transLabel(t); g.add(sp); placeLabel(sp, r, z, g); (o.labels = o.labels || []).push(sp); });
-  // 케이스: 단면 프로필을 270°만 돌려 앞쪽 아래 1/4을 잘라 낸 알루미늄 껍데기
-  const prof = [[44, TL.pump - 6], [PG.Zr / 2 + 7, TL.front - 8], [PG.Zr / 2 + 7, TL.out - 9], [70, TL.out - 7], [70, TL.B26 + 6], [42, TL.OD - 3], [42, TL.end + 3], [8, TL.end + 5]];
+  // 축 밖에 있는 부품: 각자의 중심에서 아래쪽(+y)으로 이름표
+  // [글자, z, 부품 위 점(x, y), 이름표 위치(x, y)]
+  [['트랜스퍼 기어', TL.out, [TD.cx - 55, TD.cy], [TD.cx - 92, TD.cy - 18]], ['종감속·차동기어', TL.diff, [TD.dx, TD.dy + 40], [TD.dx, TD.dy + 62]], ['구동축 (바퀴로)', 80, [TD.dx, TD.dy + 8], [TD.dx, TD.dy + 62]]].forEach(([t, z, pt, lp]) => {
+    const sp = transLabel(t); g.add(sp); placeLabel(sp, 0, z, g, { pt, lp }); (o.labels = o.labels || []).push(sp); });
+  // 케이스: 단면 프로필을 180°만 돌려 카메라 쪽 절반을 잘라 낸 알루미늄 껍데기
+  const prof = [[88, -121], [88, -76], [44, TL.pump - 6], [PG.Zr / 2 + 7, TL.front - 8], [PG.Zr / 2 + 7, TL.out - 9], [70, TL.out - 7], [70, TL.B26 + 6], [42, TL.OD - 3], [42, TL.end + 3], [8, TL.end + 5]];
   const inner = prof.map(([r, z]) => new T3.Vector2(r, z)), outer = prof.slice().reverse().map(([r, z]) => new T3.Vector2(r + 2.5, z));
   const lathe = (phiStart, len, mat) => { const lg = new T3.LatheGeometry(inner.concat(outer, [inner[0]]), 72, phiStart, len); lg.rotateX(Math.PI / 2); const m = new T3.Mesh(lg, mat); g.add(m); return m; };
-  o.caseCut = lathe(0, 1.5 * Math.PI, M.alu); o.caseFull = lathe(0, TAU, new T3.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 0.4, roughness: 0.6, transparent: true, opacity: 0.18, depthWrite: false, side: T3.DoubleSide }));
+  o.caseCut = lathe(0, Math.PI, M.alu); o.caseFull = lathe(0, TAU, new T3.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 0.4, roughness: 0.6, transparent: true, opacity: 0.18, depthWrite: false, side: T3.DoubleSide }));
   // 잘린 단면(두 장): 밝은 색으로 칠해 단면임을 보이게
   const cutShape = new T3.Shape(inner.concat(outer).map(v => new T3.Vector2(v.x, v.y)));
-  [0, 1.5 * Math.PI].forEach(a => { const cg = new T3.ShapeGeometry(cutShape); const m = new T3.Mesh(cg, M.aluCut); m.rotation.order = 'ZXY';
+  [0, Math.PI].forEach(a => { const cg = new T3.ShapeGeometry(cutShape); const m = new T3.Mesh(cg, M.aluCut); m.rotation.order = 'ZXY';
     // 프로필 평면(x=r, y=z)을 케이스 각도 a에 맞춰 세운다: lathe의 각 φ에서 점 = (r sinφ, −r cosφ, z)
     const grp = new T3.Group(); m.rotation.x = Math.PI / 2; grp.add(m); grp.rotation.z = a - Math.PI / 2; o.caseCut.add(grp); });
   applyCaseMode(o); setTimeout(setTransColors);
@@ -1734,23 +1803,36 @@ function transLabel(text) {                               // 글자 길이에 �
   sp.scale.set(w / 64 * 6.5, 6.5, 1); sp.renderOrder = 10; return sp;
 }
 // 축을 따라 부품이 촘촘하므로, z 순서대로 위·아래 줄에 번갈아 두고 가는 선으로 부품과 잇는다
-function placeLabel(sp, r, z, g) {
-  const order = [TL.pump - 12, TL.pump, TL.front, TL.UD, TL.out, TL.rear + 3, TL.LR, TL.B26, TL.OD, TL.R35].indexOf(z);
-  const up = order % 2 === 0, y = up ? -92 : 92;              // 화면 위쪽이 −y
-  sp.position.set(0, y, z);
-  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, y + (up ? 4 : -4), z), new THREE.Vector3(0, up ? -r : r, z)]);
+function placeLabel(sp, r, z, g, opt) {
+  const order = [TL.lock, TL.tc, TL.pump, TL.front, TL.UD, TL.out, TL.rear + 3, TL.LR, TL.B26, TL.OD, TL.R35].indexOf(z);
+  const up = order % 2 === 0, y = up ? -96 : 96;            // 화면 위쪽이 −y
+  const lp = opt && opt.lp ? opt.lp : [0, y], pt = opt && opt.pt ? opt.pt : [0, up ? -r : r];   // 이름표 위치, 선이 닿는 부품 위 점
+  sp.position.set(lp[0], lp[1], z);
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(lp[0], lp[1], z), new THREE.Vector3(pt[0], pt[1], z)]);
   const ln = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xb0b4ba, transparent: true, opacity: 0.8, depthTest: false }));
   ln.renderOrder = 9; g.add(ln); sp.userData.line = ln;
 }
 function applyCaseMode(o) {
   o = o || TR.obj; if (!o) return;
   o.caseCut.visible = TR.caseMode === 'cut'; o.caseFull.visible = TR.caseMode === 'ghost';
-  o.clips.forEach(([, m]) => { m.clippingPlanes = TR.caseMode === 'cut' ? TCLIP : null; m.needsUpdate = true; });
+  o.clips.forEach(([, m]) => { m.clippingPlanes = TR.caseMode === 'cut' ? (m === o.dcM ? TCLIP_D : TCLIP) : null; m.needsUpdate = true; });
 }
 function updateTrans(ctl, o) {
   const has = id => lastActive.includes(id), on = { UD: has('UD'), OD: has('OD'), LR: has('LR') || has('OWC'), '35R': has('35R'), '26': has('26') };
   o.inShaft.rotation.z = vis.thS; o.inDrum.rotation.z = vis.thS; o.sunF.rotation.z = vis.thS; o.ringF.rotation.z = ringF0;
   o.carF.rotation.z = vis.thC;
+  // 토크 컨버터: 펌프는 엔진 속도(같은 배율로 늦춤), 터빈은 입력축, 스테이터는 토크 증대 중엔 멈추고 결합 구간에선 함께 돈다
+  TR.thP = (TR.thP || 0) + sim.we * FRAME_DT * vis.slow;
+  if (sim.tc.lock || sim.tc.sr > 0.85) TR.thSt = (TR.thSt || 0) + vis.win * FRAME_DT * vis.slow * 0.97;
+  o.tcEng.rotation.z = TR.thP; o.pumpGear.rotation.z = TR.thP; o.tcTurb.rotation.z = vis.thS; o.tcStat.rotation.z = TR.thSt || 0;
+  o.lockGap += ((sim.tc.lock ? 0.05 : 2) - o.lockGap) * (1 - Math.exp(-FRAME_DT / 0.12));
+  o.tcLock.position.z = -110.4 + o.lockGap;            // 커버 안쪽면(−112) 바로 뒤. 붙으면 틈 0 o.tcLock.rotation.z = sim.tc.lock ? TR.thP : vis.thS;
+  o.lockFric.emissive.set(sim.tc.lock ? getComputedStyle(document.documentElement).getPropertyValue('--on').trim() : '#000000'); o.lockFric.emissiveIntensity = 0.55;
+  // 출력 기어(링) → 트랜스퍼 → 종감속 피니언 → 차동기어 링: 바깥 기어 맞물림 위상은 meshPlanet으로
+  const G = o.gear, thCs = meshPlanet(vis.thR, G.Zo, G.aC, G.Zd);
+  o.csDriven.rotation.z = thCs; o.csPin.rotation.z = thCs * G.Zd / G.Zd;
+  const thD = meshPlanet(thCs, G.Zp, G.aD, G.Zr);
+  o.dfRing.rotation.z = thD; o.cross.rotation.z = thD; o.sideL.rotation.z = thD; o.sideR.rotation.z = thD;
   o.fp.forEach((m, i) => { const a = vis.thC + i * TAU / PG.nF; m.rotation.z = meshPlanet(vis.thS, PG.Zs, a, PG.Zp) - vis.thC; });
   o.s1.rotation.z = vis.th1; o.sh1.rotation.z = vis.th1; o.s2.rotation.z = vis.th2; o.sh2.rotation.z = vis.th2; o.ring.rotation.z = vis.thR;
   o.carR.rotation.z = vis.thCR;
@@ -1777,10 +1859,11 @@ function updateTrans(ctl, o) {
 }
 const TCAMS = { oblique: [-0.82, -0.5, -0.28], side: [-1, -0.08, 0.02], front: [-0.05, -0.05, -1] };
 function transCam(name) {
-  const box = $('boxT'), asp = box.clientWidth / Math.max(1, box.clientHeight), D = asp < 1.3 ? 380 : 470;   // 좁은(정사각) 화면은 더 가까이
+  const box = $('boxT'), asp = box.clientWidth / Math.max(1, box.clientHeight), D = asp < 1.3 ? 560 : 640;   // 좁은(정사각) 화면은 더 가까이
   const v = new THREE.Vector3(...TCAMS[name]).normalize().multiplyScalar(D);
-  TR.ctl.camera.position.set(v.x, v.y, v.z - 2); TR.ctl.controls.target.set(0, 0, -2);
-  TR.ctl.controls.minDistance = 60; TR.ctl.controls.maxDistance = 700; TR.ctl.controls.update();
+  const t = new THREE.Vector3(-55, 25, -25);                  // 변속기·차동기어 전체의 가운데쯤
+  TR.ctl.camera.position.copy(t).add(v); TR.ctl.controls.target.copy(t);
+  TR.ctl.controls.minDistance = 60; TR.ctl.controls.maxDistance = 1000; TR.ctl.controls.update();
 }
 async function initTrans() {
   if (TR.ready || TR.loading) return;
