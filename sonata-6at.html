@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20261020a">
+<link rel="stylesheet" href="css/style.css?v=20261020b">
 </head>
 <body>
 <main>
@@ -37,6 +37,8 @@
 <path d="M-40 6 L-12 6 L-8 16 L8 16 L12 6 L40 6" fill="none" stroke="#2a2c30" stroke-width="9" stroke-linejoin="round"/><path d="M0 16 L0 40" stroke="#2a2c30" stroke-width="9"/>
 <circle r="13" fill="#2a2c30"/><circle r="6" fill="#c8ccd2"/><rect x="-3" y="-49" width="6" height="9" rx="2" fill="#e8590c"/></svg></div>
           <div class="wheel-tag" id="wheelTag">핸들 0°</div>
+          <canvas id="dash" class="dash" aria-hidden="true"></canvas>
+          <button class="hb-btn" type="button" id="hbBtn" aria-label="사이드 브레이크(누르고 있기, Space)">사이드</button>
           <div class="steer-btns"><button type="button" id="stL" aria-label="왼쪽으로 조향(누르고 있기)">◀</button><button type="button" id="stR" aria-label="오른쪽으로 조향(누르고 있기)">▶</button></div>
           <button class="big-exit full-only" type="button" id="bigExit">✕ 작게 보기</button>
           <div class="full-read full-only num" aria-hidden="true"><b id="fKmh">0</b><span>km/h</span><em id="fGear">N</em><span id="fRpm">800 rpm</span></div>
@@ -44,13 +46,14 @@
             <div class="fl" id="fLever"><button type="button" data-k="R" aria-pressed="false">R</button><button type="button" data-k="N" aria-pressed="true">N</button><button type="button" data-k="D" aria-pressed="false">D</button></div>
             <button class="fb2 fbrake" type="button" id="fBrake">브레이크</button>
             <button class="fb2 fgas" type="button" id="fGas">가속<i id="fGasBar"></i></button>
+            <button class="fb2 fhb" type="button" id="fHb">사이드</button>
             <button class="fmode" type="button" id="fSteerMode">핸들: 직접</button>
           </div>
           <div class="course-bar num" id="courseBar" hidden><b id="dCorner"></b><b id="dLap"></b></div>
           <div class="drive-tip" id="driveTip"><div>레버를 D로 놓고 가속 페달을 올려 보세요<small>키보드: <b>D</b> 누른 뒤 <b>↑</b></small></div></div>
         </div>
         <div class="row2"><button class="qb" type="button" data-dcam="back">뒤에서</button><button class="qb" type="button" data-dcam="side">옆에서</button><button class="qb" type="button" data-dcam="top">위에서</button><button class="qb" type="button" id="toTrans">변속기 속 보기</button></div>
-        <div class="row2" style="margin-top:8px"><button class="qb primary" type="button" id="bigBtn">⤢ 크게 보기</button><button class="qb" type="button" id="steerMode">핸들: 직접</button></div>
+        <div class="row2" style="margin-top:8px"><button class="qb primary" type="button" id="bigBtn">⤢ 크게 보기</button><button class="qb" type="button" id="steerMode">핸들: 직접</button><button class="qb" type="button" id="recover">↺ 길 위로 되돌리기</button></div>
         <div class="paint-row"><span>차 색</span><div id="paintRow" role="radiogroup" aria-label="차 색"></div></div>
         <p class="lab-msg" id="msg3D" aria-live="polite" style="margin-top:8px"></p>
       </div>
@@ -175,6 +178,7 @@
           <button class="btn" id="release" type="button">가속 놓기</button>
           <button class="btn" id="brake" type="button">브레이크 (누르고 있기)</button>
         </div>
+        <button class="btn" id="hbCtl" type="button">사이드 브레이크 (누르고 있기 · Space)</button>
         <fieldset>
           <legend>주행 모드</legend>
           <div class="seg four" id="modeSeg" role="radiogroup" aria-label="주행 모드"></div>
@@ -197,7 +201,7 @@
           <div class="slider-head"><span>소리 크기</span><b class="num" id="volLabel">60%</b></div>
           <input type="range" id="vol" min="0" max="100" step="5" value="60" aria-label="엔진 소리 크기">
         </div>
-        <p class="keys">키보드: <kbd>↑</kbd> 가속 +10% · <kbd>↓</kbd> 브레이크(누르는 동안) · <kbd>R</kbd><kbd>N</kbd><kbd>D</kbd> 레버 · <kbd>1</kbd>~<kbd>6</kbd> 수동 · <kbd>0</kbd> 자동 · <kbd>←</kbd><kbd>→</kbd> 핸들 · <kbd>S</kbd> 소리 · <kbd>M</kbd> 주행 모드</p>
+        <p class="keys">키보드: <kbd>↑</kbd> 가속 +10% · <kbd>↓</kbd> 브레이크(누르는 동안) · <kbd>R</kbd><kbd>N</kbd><kbd>D</kbd> 레버 · <kbd>1</kbd>~<kbd>6</kbd> 수동 · <kbd>0</kbd> 자동 · <kbd>←</kbd><kbd>→</kbd> 핸들 · <kbd>Space</kbd> 사이드 브레이크 · <kbd>S</kbd> 소리 · <kbd>M</kbd> 주행 모드</p>
         <div id="msg" aria-live="polite">레버를 D로 놓고 가속 페달을 올려 보세요.</div>
       </div>
     </div>
@@ -338,8 +342,9 @@
   </div>
 </main>
 
-<script src="js/sim.js?v=20261020a"></script>
-<script src="js/course.js?v=20261020a"></script>
-<script src="js/app.js?v=20261020a"></script>
+<script src="js/sim.js?v=20261020b"></script>
+<script src="js/course.js?v=20261020b"></script>
+<script src="js/dynamics.js?v=20261020b"></script>
+<script src="js/app.js?v=20261020b"></script>
 </body>
 </html>

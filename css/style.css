@@ -506,3 +506,27 @@ legend { font-size: 13px; font-weight: 500; color: var(--ink-2); }
   .hero-drive #box3D { aspect-ratio: 4 / 3; }
 }
 @media (max-width: 560px) { .drive-tip { place-items: center; padding: 0 12px; } }
+
+/* 주행 화면 계기판(아래 가운데), 사이드 브레이크 버튼, 겹치지 않는 배치 */
+.dash { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: 360px; height: 124px; aspect-ratio: auto; border-radius: 20px;
+  background: rgba(22, 22, 23, .62); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); pointer-events: none; z-index: 2; }
+.drive-box.full .dash { width: 480px; height: 165px; bottom: 20px; }
+.full-read { display: none !important; }
+.drive-box .course-bar { left: 10px; right: auto; bottom: 12px; flex-direction: column; align-items: flex-start; max-width: calc(50% - 196px); }
+.drive-box.full .course-bar { bottom: 130px; left: 14px; right: auto; max-width: 280px; }
+.hb-btn { position: absolute; right: 98px; bottom: 72px; z-index: 3; border: 0; border-radius: 980px; padding: 8px 14px; background: rgba(22, 22, 23, .62); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
+.hb-btn.down, .full-ctrl .fhb.down, #hbCtl.down { background: #ff9f0a; color: #111; }
+.drive-box.full .hb-btn { display: none; }
+.full-ctrl .fhb { background: rgba(255, 159, 10, .9); color: #111; width: 92px; }
+@media (max-width: 1100px) { .dash { width: 300px; height: 104px; } .drive-box .course-bar { max-width: calc(50% - 166px); } }
+@media (max-width: 560px) {
+  .drive-hud { display: none; }
+  .dash { left: 8px; top: 8px; bottom: auto; transform: none; width: 230px; height: 80px; border-radius: 14px; }
+  .drive-box .course-bar { max-width: 55%; bottom: 10px; }
+  .hb-btn { right: 76px; bottom: 58px; padding: 6px 10px; font-size: 12px; }
+  .drive-box.full .dash { width: 300px; height: 104px; top: 54px; left: 10px; }
+  .drive-box.full .course-bar { bottom: 104px; max-width: 60%; }
+  .full-ctrl .fhb { width: 70px; }
+}
+@media (max-width: 560px) { .mini-map { top: 8px; right: 8px; bottom: auto; width: 72px; height: 72px; } .drive-box.full .mini-map { top: 54px; } }

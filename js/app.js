@@ -1460,6 +1460,93 @@ function buildCourseScene(T3, c, std) {
   return g;
 }
 
+// ---- 미끄럼 효과: 타이어 자국(바닥에 남는 검은 줄)과 타이어 연기 ----
+// 직선 도로는 세상이 뒤로 흐르므로 효과 묶음을 sim.x만큼 함께 옮긴다(코스에서는 제자리)
+const FX = { reset: false, mi: 0, lastS: null, smoke: [], x0: 0, wheel: 0 };
+function buildFX(T3, scene) {
+  const g = new T3.Group(); scene.add(g); FX.group = g;
+  const N = 1200, geo = new T3.PlaneGeometry(0.22, 0.34); geo.rotateX(-Math.PI / 2);
+  const mat = new T3.MeshBasicMaterial({ color: 0x0b0b0b, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+  FX.marks = new T3.InstancedMesh(geo, mat, N); FX.marks.frustumCulled = false; FX.N = N;
+  const zero = new T3.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < N; i++) FX.marks.setMatrixAt(i, zero); g.add(FX.marks);
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d'), gr = c.createRadialGradient(32, 32, 2, 32, 32, 30);
+  gr.addColorStop(0, 'rgba(236,236,236,0.95)'); gr.addColorStop(1, 'rgba(236,236,236,0)'); c.fillStyle = gr; c.fillRect(0, 0, 64, 64);
+  const tex = new T3.CanvasTexture(cv);
+  for (let i = 0; i < 56; i++) { const sp = new T3.Sprite(new T3.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0 })); sp.visible = false; g.add(sp); FX.smoke.push({ sp, life: 0 }); }
+}
+function updateFX(P, dt) {
+  if (!FX.group) return;
+  const T3 = THREE, C = COURSE.c;
+  if (FX.reset) {
+    const zero = new T3.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < FX.N; i++) FX.marks.setMatrixAt(i, zero);
+    FX.marks.instanceMatrix.needsUpdate = true; FX.smoke.forEach(p => { p.life = 0; p.sp.visible = false; }); FX.reset = false; FX.lastS = null; FX.x0 = sim.x;
+  }
+  FX.group.position.z = C ? 0 : sim.x - FX.x0;
+  const o = DYNS.out, v = Math.abs(sim.v), rear = o ? o.slipR : 0, front = o ? o.slipF : Math.min(1, sim.slide * 3);
+  const spinning = sim.spin > 0.15 && v < 15;                           // 출발 때 헛도는 앞바퀴도 자국을 남긴다
+  const skid = v > 1.5 && (rear > 0.12 || front > 0.4 || spinning);
+  drive.car.updateMatrixWorld();
+  const local = (x, y, z) => { const p = drive.car.localToWorld(new T3.Vector3(x, y, z)); p.z -= FX.group.position.z; return p; };
+  if (skid && (FX.lastS === null || drive.dist - FX.lastS > 0.3)) {
+    FX.lastS = drive.dist;
+    const yaw = P.psi - (o ? o.beta : 0), q = new T3.Quaternion().setFromAxisAngle(new T3.Vector3(0, 1, 0), yaw), one = new T3.Vector3(1, 1, 1), m4 = new T3.Matrix4();
+    const ws = []; if (rear > 0.12) ws.push([-0.81, 1.42], [0.81, 1.42]); if (front > 0.4 || spinning) ws.push([-0.81, -1.42], [0.81, -1.42]);
+    ws.forEach(([x, z]) => { m4.compose(local(x, 0.035, z), q, one); FX.marks.setMatrixAt(FX.mi++ % FX.N, m4); });
+    FX.marks.instanceMatrix.needsUpdate = true;
+  } else if (!skid) FX.lastS = null;
+  // 연기: 뒤(사이드·드리프트) 또는 앞(헛돎) 바퀴에서 피어올라 커지며 옅어진다
+  const smokeAmt = Math.max(rear > 0.3 && v > 3 ? rear : 0, spinning ? sim.spin : 0);
+  if (smokeAmt > 0 && Math.random() < 0.35 + smokeAmt * 0.5) {
+    const p = FX.smoke.find(q => q.life <= 0);
+    if (p) { FX.wheel ^= 1; const z = spinning && rear < 0.3 ? -1.42 : 1.42; p.sp.position.copy(local(FX.wheel ? 0.81 : -0.81, 0.3, z));
+      p.life = p.max = 1.2 + Math.random() * 0.6; p.amt = smokeAmt; p.sp.visible = true; }
+  }
+  FX.smoke.forEach(p => {
+    if (p.life <= 0) return;
+    p.life -= dt; const k = 1 - p.life / p.max;
+    if (p.life <= 0) { p.sp.visible = false; return; }
+    p.sp.position.y += 0.6 * dt; p.sp.scale.setScalar(0.8 + k * 3.2); p.sp.material.opacity = 0.42 * (1 - k) * Math.min(1, p.amt + 0.3);
+  });
+}
+// 미끄럼 정도(0~1): 타이어 소리와 계기판 표시에 쓴다
+function slipAmount() {
+  const o = DYNS.out, v = Math.abs(sim.v);
+  const tire = o ? Math.max(o.slipR, o.slipF * 0.8) : sim.slide * 2;
+  return clamp(Math.max(tire * Math.min(1, v / 8), sim.spin * 0.8), 0, 1);
+}
+
+// ---- 주행 화면 계기판: RPM·속도 바늘과 기어 단, 드리프트 각 ----
+function drawDash() {
+  const cv = $('dash'); if (!cv || !drive.visible) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
+  if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const c = cv.getContext('2d'), s = W / 360, font = getComputedStyle(document.body).fontFamily, acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  c.setTransform(dpr * s, 0, 0, dpr * s, 0, 0); c.clearRect(0, 0, 360, H / s);
+  const gauge = (cx, cy, R, val, max, step, label, labelEvery, red, unit) => {
+    const a0 = 0.75 * Math.PI, sw = 1.5 * Math.PI, ang = x => a0 + sw * Math.min(x, max) / max;
+    c.lineCap = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,.18)'; c.beginPath(); c.arc(cx, cy, R, a0, a0 + sw); c.stroke();
+    if (red) { c.strokeStyle = '#ff453a'; c.beginPath(); c.arc(cx, cy, R, ang(red), a0 + sw); c.stroke(); }
+    c.strokeStyle = acc; c.lineWidth = 3; c.beginPath(); c.arc(cx, cy, R, a0, ang(val)); c.stroke();
+    c.fillStyle = 'rgba(255,255,255,.75)'; c.font = '500 9px ' + font; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let x = 0; x <= max; x += step) { const a = ang(x), big = x % labelEvery === 0;
+      c.strokeStyle = 'rgba(255,255,255,' + (big ? .7 : .3) + ')'; c.lineWidth = big ? 1.6 : 1; c.beginPath();
+      c.moveTo(cx + Math.cos(a) * (R - 6), cy + Math.sin(a) * (R - 6)); c.lineTo(cx + Math.cos(a) * (R - (big ? 11 : 9)), cy + Math.sin(a) * (R - (big ? 11 : 9))); c.stroke();
+      if (big) c.fillText(label(x), cx + Math.cos(a) * (R - 20), cy + Math.sin(a) * (R - 20)); }
+    const a = ang(val); c.strokeStyle = '#fff'; c.lineWidth = 2.2; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * (R - 8), cy + Math.sin(a) * (R - 8)); c.stroke();
+    c.fillStyle = acc; c.beginPath(); c.arc(cx, cy, 3.5, 0, 7); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.5)'; c.font = '9px ' + font; c.fillText(unit, cx, cy + R * 0.55);
+  };
+  gauge(62, 66, 50, disp.rpm, 7000, 500, x => String(x / 1000), 1000, 6500, '×1000 rpm');
+  gauge(298, 66, 50, disp.kmh, 240, 10, x => String(x), 40, 0, 'km/h');
+  const tg = targetGear(), gl = tg === 'N' ? 'N' : tg === 'R' ? 'R' : (sim.manual ? 'M' : 'D') + tg;
+  c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  c.fillStyle = sim.shift ? '#ffffff' : acc; c.font = '600 40px ' + font; c.fillText(gl, 180, 58);
+  c.fillStyle = '#fff'; c.font = '300 22px ' + font; c.fillText(Math.round(disp.kmh) + ' km/h', 180, 88);
+  const o = DYNS.out, beta = o ? Math.abs(o.beta) * 180 / Math.PI : 0;
+  const msg = HB.on ? '사이드 브레이크' : LAT.off ? '도로 밖' : beta > 8 && Math.abs(sim.v) > 4 ? '드리프트 ' + Math.round(beta) + '°' : sim.spin > 0.15 ? '바퀴 헛돎' : slipAmount() > 0.25 ? '미끄러짐' : sim.shift ? '변속 중' : '';
+  if (msg) { c.fillStyle = HB.on || LAT.off ? '#ff9f0a' : '#ffd60a'; c.font = '600 12px ' + font; c.fillText(msg, 180, 112); }
+}
+
 function buildDrive() {
   const T3 = THREE, box = $('box3D');
   const renderer = new T3.WebGLRenderer({ antialias: true });
@@ -1520,6 +1607,7 @@ function buildDrive() {
     ray.setFromCamera(ndc, camera);
     if (ray.intersectObject(car, true).length) goTrans();
   });
+  buildFX(T3, scene);
   Object.assign(drive, { renderer, scene, camera, controls, body, root, car, ready: true });
   driveCam('back');
 }
@@ -1585,13 +1673,14 @@ function renderDrive(dt) {
   }
   drive.car.position.set(P.x, P.y, P.z); drive.car.rotation.y = P.psi; drive.car.rotation.x = Math.atan(P.grade);
   followCam(P);
+  updateFX(P, dt);
   drive.body.rotation.x = drive.pitch;
   // 바퀴: 왼쪽(0, 2)·오른쪽(1, 3) 속도가 회전 반경에 따라 다르다. 앞바퀴는 헛돌면 더 돈다
   const fl = 1 + STEER.k, fr = 1 - STEER.k;
   drive.roll = drive.roll || [0, 0, 0, 0];
   [fl, fr, fl, fr].forEach((f, i) => { drive.roll[i] -= (v / CFG.tireR * f + (i < 2 ? sim.spin * 30 * sim.Fdir : 0)) * dt; drive.wheels[i].rotation.x = drive.roll[i]; });
   drive.pivots.forEach(p => { p.rotation.y = -STEER.delta; });          // 실제 바퀴 조향각
-  const ay = isFinite(STEER.R) ? v * v / STEER.R * Math.sign(STEER.v) : 0;
+  const ay = DYNS.out ? DYNS.out.ay : isFinite(STEER.R) ? v * v / STEER.R * Math.sign(STEER.v) : 0;
   drive.body.rotation.z += (clamp(ay * 0.006, -0.06, 0.06) - drive.body.rotation.z) * Math.min(1, dt * 6);   // 바깥으로 기우는 차체
   const turning = isFinite(STEER.R) && Math.abs(v) > 0.3;
   $('dTurnBox').hidden = !turning;
@@ -1644,25 +1733,57 @@ function roadEdges() {
   const C = COURSE.c;
   return C ? { lo: -(C.def.width / 2 + C.def.lane), hi: C.def.width / 2 - C.def.lane, wall: C.def.kind === 'mountain' ? 1.0 : C.def.kind === 'circuit' ? 9 : 12 } : { lo: -6, hi: 2, wall: 12 };
 }
+// 직접 핸들·사이드 브레이크일 때는 타이어 모델(js/dynamics.js)로 차의 옆 미끄럼 vy와 요 각속도 r을 풀고,
+// 도로 기준 옆 위치 e와 방향 오차 h를 적분한다. 자동 핸들이면 차가 길을 따라가고(옛 방식) 미끄럼은 sim.slide로만 흉내 낸다
+const DYNS = { vy: 0, r: 0, out: null, lastV: 0, ax: 0 };
+const HB = { on: false };
+function resetDyn() { DYNS.vy = 0; DYNS.r = 0; DYNS.out = null; LAT.e = 0; LAT.h = 0; ROAD.curvOverride = null; ROAD.offroad = LAT.off = false; FX.reset = true; }
 function updateLateral(dt) {
-  const C = COURSE.c, v = sim.v;
+  const C = COURSE.c;
+  if (HB.on && C && STEER.mode === 'auto') setSteerMode('manual');            // 사이드 브레이크를 당기면 직접 운전으로
   if (C && STEER.mode === 'auto') {
-    LAT.e *= Math.max(0, 1 - dt * 2); LAT.h *= Math.max(0, 1 - dt * 4); ROAD.curvOverride = null; ROAD.offroad = LAT.off = false; return;
+    LAT.e *= Math.max(0, 1 - dt * 2); LAT.h *= Math.max(0, 1 - dt * 4); DYNS.vy = 0; DYNS.r = 0; DYNS.out = null;
+    ROAD.curvOverride = null; ROAD.offroad = LAT.off = false; return;
   }
-  const kCar = Math.tan(STEER.v * 0.6 * steerGain()) / 2.84, kRoad = C ? C.curvAt(sim.x) : 0;
-  LAT.h = clamp(LAT.h + (kCar - kRoad) * v * dt, -1.2, 1.2);
-  LAT.e += v * Math.sin(LAT.h) * dt;
-  ROAD.curvOverride = kCar;
-  const E = roadEdges(), off = LAT.e < E.lo - 0.2 || LAT.e > E.hi + 0.2;
-  if (off && !LAT.off && Math.abs(v) > 1) say('도로를 벗어났습니다. 풀밭에서는 차가 느려집니다.', true);
+  ROAD.curvOverride = 0;                                  // 코너 미끄럼은 타이어 모델이 맡는다(sim.js의 단순 끌림은 끔)
+  const ax = dt > 0 ? (sim.v - DYNS.lastV) / dt : 0; DYNS.lastV = sim.v; DYNS.ax += (ax - DYNS.ax) * Math.min(1, dt * 10);
+  const n = Math.max(1, Math.ceil(dt / 0.004)), hs = dt / n, mu = sim.mu * (LAT.off ? 0.55 : 1);
+  const brake = sim.brake ? Math.min(7.5, sim.mu * G0 * 0.95) : 0;
+  let o = null;
+  for (let k = 0; k < n; k++) {
+    const kRoad = C ? C.curvAt(sim.x) : 0;
+    o = dynStep(DYNS, { vx: sim.v, delta: STEER.v * 0.6 * steerGain(), mu, ax: DYNS.ax, brake, hb: HB.on }, hs);
+    if (sim.v > DYN.kinV) sim.v = Math.max(0, sim.v + o.dvx * hs);
+    const ch = Math.cos(LAT.h), sh = Math.sin(LAT.h), along = sim.v * ch - DYNS.vy * sh, lat = sim.v * sh + DYNS.vy * ch;
+    LAT.h += (DYNS.r - kRoad * along) * hs; LAT.h -= Math.round(LAT.h / TAU) * TAU;          // 한 바퀴 돌아도 −π~π
+    LAT.e += lat * hs;
+    sim.x += (along - sim.v) * hs;                       // sim.js는 차 속도만큼 나아가게 했으므로 도로 방향 성분으로 바로잡는다
+  }
+  DYNS.out = o;
+  const E = roadEdges(), off = LAT.e < E.lo - 0.2 || LAT.e > E.hi + 0.2, v = sim.v;
+  if (off && !LAT.off && Math.abs(v) > 1) say('도로를 벗어났습니다. 풀밭에서는 미끄럽고 느려집니다.', true);
   LAT.off = ROAD.offroad = off;
-  if (LAT.e < E.lo - E.wall || LAT.e > E.hi + E.wall) {                   // 가드레일·방호벽: 부딪히면 크게 감속하고 벽을 따라 선다
+  if (LAT.e < E.lo - E.wall || LAT.e > E.hi + E.wall) {                   // 가드레일·방호벽: 부딪히면 튕기며 크게 감속
     LAT.e = clamp(LAT.e, E.lo - E.wall, E.hi + E.wall);
     if (Math.abs(v) > 3) say(C && C.def.kind === 'mountain' ? '가드레일에 부딪혔습니다! 핸들을 길 쪽으로 돌리세요.' : '방호벽에 부딪혔습니다! 핸들을 길 쪽으로 돌리세요.', true);
     if (Math.abs(v) > 1) sim.v *= 0.5;
-    LAT.h *= 0.2;
+    DYNS.vy *= -0.3; DYNS.r *= 0.3; LAT.h *= 0.4;
   }
 }
+// 스핀하거나 길 밖에 멈췄을 때: 차를 차로 가운데로 되돌려 세운다(타이어 자국은 남김)
+$('recover').addEventListener('click', () => { DYNS.vy = 0; DYNS.r = 0; DYNS.out = null; LAT.e = 0; LAT.h = 0; LAT.off = ROAD.offroad = false; sim.v = 0; setThrottle(0); say('차를 차로 가운데로 되돌렸습니다.'); });
+// 사이드 브레이크: 버튼(누르고 있기)과 Space 키
+function setHB(on) {
+  if (HB.on === on) return; HB.on = on;
+  ['hbBtn', 'fHb', 'hbCtl'].forEach(id => $(id).classList.toggle('down', on));
+  if (on && Math.abs(sim.v) > 3) say('사이드 브레이크: 뒷바퀴가 잠겨 미끄러집니다. 핸들을 꺾으며 당기면 뒤가 돌아 나갑니다(드리프트).');
+}
+['hbBtn', 'fHb', 'hbCtl'].forEach(id => {
+  const b = $(id);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) {} setHB(true); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, () => setHB(false)));
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
 // 화면 핸들: 끌어서 돌린 각도만큼 조향. 놓으면 저절로 가운데로 돌아온다
 (() => {
   const w = $('wheelW'); let d = null;
@@ -1722,7 +1843,7 @@ $('grade').addEventListener('input', e => {
   const g = +e.target.value; ROAD.set(g / 100, sim.x + (sim.v < 0 ? -15 : 15));   // 15m 앞부터 12m에 걸쳐 바뀐다
   $('gradeLabel').textContent = gradeText(g);
 });
-function setRoadNow(pct) { if (COURSE.id !== 'straight') selectCourse('straight'); ROAD.reset(pct / 100, sim.x); $('grade').value = pct; $('gradeLabel').textContent = gradeText(pct); }
+function setRoadNow(pct) { if (COURSE.id !== 'straight') selectCourse('straight'); resetDyn(); ROAD.reset(pct / 100, sim.x); $('grade').value = pct; $('gradeLabel').textContent = gradeText(pct); }
 
 // ---- 도로 고르기: 직선(무한 직선 + 경사 슬라이더) 또는 코스(굽은 국도·산길·서킷, 닫힌 고리) ----
 const COURSE = { id: 'straight', c: null, cache: {}, lap: 0, lapT0: null, last: null, best: {}, mapCv: null, mapDrawT: 0 };
@@ -1731,7 +1852,7 @@ const fmtLap = t => t == null ? '–' : Math.floor(t / 60) + ':' + (t % 60).toFi
 function selectCourse(id) {
   if (COURSE.id === id && (id === 'straight' || COURSE.c)) return;
   COURSE.id = id; COURSE.lap = 0; COURSE.lapT0 = null; COURSE.last = null; COURSE.mapCv = null;
-  LAT.e = 0; LAT.h = 0; STEER.target = 0; ROAD.curvOverride = null; ROAD.offroad = false;
+  resetDyn(); STEER.target = 0;
   STEER.mode = id === 'straight' ? 'manual' : 'auto'; ['steerMode', 'fSteerMode'].forEach(b => { $(b).textContent = STEER.mode === 'auto' ? '핸들: 자동' : '핸들: 직접'; $(b).hidden = id === 'straight'; });
   setThrottle(0); sim.v = 0; sim.lock = false; sim.slide = 0;
   if (id === 'straight') {
@@ -1862,6 +1983,9 @@ function engineGraph(c, dest) {
   n.lfo = c.createOscillator(); n.lfo.type = 'sine'; const depth = c.createGain(); depth.gain.value = 0.25; n.lfo.connect(depth).connect(n.am.gain); n.lfo.start();   // 폭발 주기의 떨림
   n.hp = c.createBiquadFilter(); n.hp.type = 'highpass'; n.hp.frequency.value = 130; n.hp.Q.value = 0.5;
   n.out = c.createGain(); n.out.gain.value = 0;
+  // 타이어 끌리는 소리: 잡음을 1.7kHz 근처로 좁게 걸러 미끄러질 때만 키운다
+  n.sqBp = c.createBiquadFilter(); n.sqBp.type = 'bandpass'; n.sqBp.frequency.value = 1700; n.sqBp.Q.value = 7;
+  n.sqG = c.createGain(); n.sqG.gain.value = 0; n.noise.connect(n.sqBp).connect(n.sqG).connect(dest);
   n.lp.connect(shaper).connect(n.am).connect(n.hp).connect(n.out).connect(dest);
   return n;
 }
@@ -1892,6 +2016,7 @@ function updateSound(rpm) {
   if (!snd.ctx) return;
   const t = snd.ctx.currentTime, dip = sim.shift && sim.shift.t < sim.shift.dur * 0.6 ? 0.5 : 1;
   engineSet(snd.n, t, rpm, sim.th, snd.on ? engineGain(rpm, sim.th) * dip * VOL.v / 0.6 : 0);
+  const sl = slipAmount(); snd.n.sqG.gain.setTargetAtTime(snd.on ? sl * sl * 0.55 * VOL.v / 0.6 : 0, t, 0.05); snd.n.sqBp.frequency.setTargetAtTime(1500 + 500 * sl, t, 0.1);
   // 레벨 막대와 안내: 실제로 소리가 나가는지 보여 준다
   snd.an.getFloatTimeDomainData(snd.buf); let e = 0; for (const x of snd.buf) e += x * x;
   const rms = Math.sqrt(e / snd.buf.length); $('sndMeter').style.width = Math.min(100, rms * 400) + '%';
@@ -1911,12 +2036,13 @@ document.addEventListener('keydown', e => {
   else if (/^Digit[1-6]$/.test(k)) requestManual(+k.slice(5));
   else if (k === 'Digit0') requestManual(null);
   else if (k === 'ArrowLeft' || k === 'ArrowRight') { if (COURSE.c && STEER.mode === 'auto') setSteerMode('manual'); STEER.key = k === 'ArrowLeft' ? -1 : 1; STEER.keyUsed = true; }
+  else if (k === 'Space') { if (e.target.closest('button')) e.target.blur(); setHB(true); }
   else if (k === 'KeyS') soundToggle();
   else if (k === 'KeyM') { const ks = Object.keys(MODES); $('modeSeg').querySelector(`[data-k="${ks[(ks.indexOf(sim.mode) + 1) % ks.length]}"]`).click(); }
   else return;
   e.preventDefault();
 });
-document.addEventListener('keyup', e => { if (e.code === 'ArrowDown') setBrake(false); if ((e.code === 'ArrowLeft' && STEER.key < 0) || (e.code === 'ArrowRight' && STEER.key > 0)) STEER.key = 0; });
+document.addEventListener('keyup', e => { if (e.code === 'Space' && HB.on) { e.preventDefault(); setHB(false); } if (e.code === 'ArrowDown') setBrake(false); if ((e.code === 'ArrowLeft' && STEER.key < 0) || (e.code === 'ArrowRight' && STEER.key > 0)) STEER.key = 0; });
 
 // ---- 0→100km/h 측정 ----
 const LS_KEY = 'sonata6at.t100';
@@ -2592,6 +2718,7 @@ function frame(now) {
   FRAME_N++;
   watchPerf(dtR);
   updatePedalbar(dtR);
+  drawDash();
   renderDrive(dt);
   renderTrans();
   drawTC(dt);
