@@ -1,0 +1,6 @@
+#!/bin/sh
+# 커밋할 때 css·js가 바뀌었으면 sonata-6at.html의 ?v= 버전을 내용 해시로 바꿔 함께 커밋한다.
+# 켜기(한 번만): git config core.hooksPath .githooks
+if git diff --cached --name-only | grep -qE '^(css|js)/'; then
+  node scripts/bump-version.js && git add sonata-6at.html
+fi

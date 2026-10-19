@@ -8,7 +8,9 @@ const DYN = {
   hcg: 0.55,                    // 무게중심 높이: 가속·제동 때 앞뒤 하중 이동
   B: 16, C: 1.4,                // 타이어 곡선 모양: 미끄럼 각 약 7°에서 최대 힘, 크게 미끄러지면 최대의 약 80%
   kinV: 1.5,                    // 이보다 느리면 미끄럼 없는 기하학 모델로
-  rearBrake: 0.35               // 발 브레이크의 뒤바퀴 몫
+  rearBrake: 0.35,              // 발 브레이크의 뒤바퀴 몫
+  track: 1.6,                   // 윤거(ESC가 한쪽 바퀴만 잡을 때의 팔 길이 = 윤거/2)
+  Kus: 0.0022                   // 언더스티어 계수: ESC가 목표로 삼는 요 각속도에 쓴다
 };
 // 미끄럼 각 α(rad)에서 타이어 옆 힘(N). 미끄럼 반대 방향, 최대 cap
 function tireForce(alpha, Fz, mu, cap) {
@@ -40,9 +42,19 @@ function dynStep(S, I, dt) {
     Fyr = tireForce(ar, Fzr, I.mu, Math.sqrt(Math.max(0, (I.mu * Fzr) ** 2 - FxRb * FxRb)) + 0.05 * I.mu * Fzr);
   }
   const cd = Math.cos(d), sd = Math.sin(d);
-  const dvy = (Fyf * cd + Fyr) / m - vx * S.r, dr = (a * Fyf * cd - b * Fyr) / Iz;
+  // ESC(차체 자세 제어): 운전자가 원하는 요 각속도(핸들·속도·접지로 정함)와 실제가 어긋나거나 차체가 많이 돌아가면
+  // 한쪽 바퀴에 브레이크를 걸어 반대 방향 회전력(최대 약 6kN·m)을 만든다. 그만큼 차가 느려진다
+  let Mz = 0;
+  if (I.esc && vx > 3) {
+    const rMax = 0.85 * I.mu * 9.81 / vx, rRef = Math.max(-rMax, Math.min(rMax, vx * Math.tan(d) / (L * (1 + DYN.Kus * vx * vx))));
+    const err = S.r - rRef, beta = Math.atan2(S.vy, vx), Mmax = 0.5 * I.mu * mg * DYN.track / 2;
+    const dead = 0.08 + 0.3 * Math.abs(rRef);              // 꺾기 시작할 때의 자연스러운 늦음은 무시한다
+    if (vx > 5 && (Math.abs(err) > dead || Math.abs(beta) > 0.1)) Mz = -Math.max(-Mmax, Math.min(Mmax, (Math.abs(err) > dead ? err - Math.sign(err) * dead : 0) * 60000 + beta * 20000));
+    out.esc = Mz !== 0;
+  }
+  const dvy = (Fyf * cd + Fyr) / m - vx * S.r, dr = (a * Fyf * cd - b * Fyr + Mz) / Iz;
   S.vy += dvy * dt; S.r += dr * dt;
-  out.dvx = (-Fyf * sd + FxR) / m + S.vy * S.r;          // 앞바퀴 옆 힘의 뒤쪽 성분, 잠긴 뒷바퀴, 회전에 따른 속도 교환
+  out.dvx = (-Fyf * sd + FxR - Math.abs(Mz) / (DYN.track / 2)) / m + S.vy * S.r;   // 앞바퀴 옆 힘의 뒤쪽 성분, 잠긴 뒷바퀴, ESC 브레이크, 회전에 따른 속도 교환
   out.ay = (Fyf * cd + Fyr) / m;
   out.alphaF = af; out.alphaR = ar; out.beta = Math.atan2(S.vy, vx);
   // 미끄러짐 정도(0~1): 최대 힘을 내는 각(약 7°)을 넘은 정도, 사이드 브레이크면 뒤는 미끄럼 속도로
@@ -50,4 +62,22 @@ function dynStep(S, I, dt) {
   out.slipF = Math.min(1, Math.max(0, (Math.abs(af) - peak) / 0.25));
   out.slipR = I.hb ? Math.min(1, Math.hypot(vx, S.vy - b * S.r) / 15) : Math.min(1, Math.max(0, (Math.abs(ar) - peak) / 0.25));
   return out;
+}
+
+// 도로 위 진행: 차 기준 운동(dynStep)을 도로 기준으로 바꿔, 차로 가운데에서 오른쪽으로 벗어난 거리 e와
+// 도로 방향보다 오른쪽으로 틀어진 각 h를 적분한다. kRoad는 지금 위치의 도로 곡률(오른쪽 +).
+// 돌려주는 값: dvx(앞뒤 속도 변화율), along(도로 방향 속도), out(미끄럼 정보)
+function roadStep(S, I, kRoad, dt) {
+  const out = dynStep(S, I, dt), v = I.vx + out.dvx * dt * (I.vx > DYN.kinV ? 1 : 0);
+  const ch = Math.cos(S.h), sh = Math.sin(S.h), along = v * ch - S.vy * sh, lat = v * sh + S.vy * ch;
+  S.h += (S.r - kRoad * along) * dt; S.h -= Math.round(S.h / (2 * Math.PI)) * 2 * Math.PI;
+  S.e += lat * dt;
+  return { dvx: I.vx > DYN.kinV ? out.dvx : 0, along, out };
+}
+// 자동 핸들(운전 보조): 도로 곡률만큼 미리 꺾고(앞먹임), 방향 오차와 옆 오차를 줄이도록 더 꺾는다(Stanley 방식).
+// 타이어 한계를 넘는 속도면 핸들을 꺾어도 앞이 밀려 바깥으로 나간다(실제처럼)
+function autoSteer(S, kRoad, v) {
+  const ff = Math.atan(DYN.L * kRoad * (1 + DYN.Kus * v * v));
+  const fb = -1.1 * S.h - Math.atan(0.9 * S.e / Math.max(3, v));
+  return Math.max(-0.6, Math.min(0.6, ff + fb));
 }

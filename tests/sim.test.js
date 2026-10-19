@@ -113,8 +113,15 @@ test('눈길 출발 모드는 2단으로 출발한다', () => {
 
 test('페이지가 불러오는 파일이 모두 있다', () => {
   const html = fs.readFileSync(path.join(ROOT, 'sonata-6at.html'), 'utf8');
-  for (const f of ['css/style.css', 'js/sim.js', 'js/course.js', 'js/dynamics.js', 'js/app.js']) {
+  for (const f of ['css/style.css', 'js/sim.js', 'js/course.js', 'js/dynamics.js', 'js/ui.js', 'js/gear3d.js', 'js/drive-scene.js', 'js/drive.js', 'js/features.js', 'js/main.js']) {
     assert.ok(new RegExp(`"${f.replace('.', '\\.')}(\\?v=[\\w.-]+)?"`).test(html), `${f} 참조 없음`);
     assert.ok(fs.existsSync(path.join(ROOT, f)), `${f} 파일 없음`);
   }
+});
+
+test('페이지의 css·js 버전(?v=)이 파일 내용과 맞는다(바꾸고 버전을 안 올리면 실패)', () => {
+  const { assetVersion } = require(path.join(ROOT, 'scripts/bump-version.js'));
+  const { version, html, files } = assetVersion();
+  assert.ok(files.length >= 8, `불러오는 파일 ${files.length}개`);
+  for (const f of files) assert.ok(html.includes(`${f}?v=${version}"`), `${f} 버전이 ${version}이 아님. node scripts/bump-version.js 실행`);
 });

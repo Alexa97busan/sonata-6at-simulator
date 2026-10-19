@@ -3,9 +3,15 @@
 ## 파일
 - `sonata-6at.html`: 화면 구조(HTML)만. 빌드 도구 없음. 브라우저에서 바로 열면 동작합니다(`index.html`은 이 파일로 넘겨 줌).
 - `css/style.css`: 모든 스타일. 맨 끝의 '디자인 레이어'(애플·조너선 아이브 스타일)가 앞의 규칙을 덮어씁니다: 토큰(--bg #f5f5f7, --panel 흰색, --ui 파랑 #0071e3, --fill 옅은 회색, 다크 모드 값), 시스템 서체(SF/Apple SD Gothic Neo 우선), 가운데 정렬 머리말, 반투명 내비게이션, 22px 둥근 카드, 알약 버튼, 흰 손잡이 세그먼트·슬라이더. 주행 화면은 `.hero-drive`로 페이지 맨 위 전체 폭(최대 높이 74vh), 계기판은 오른쪽 칸 조작부 위로 옮겼습니다(휴대폰에서는 주행 화면 바로 아래).
-- 캐시: `sonata-6at.html`이 `css/style.css?v=…`, `js/*.js?v=…`처럼 버전을 붙여 불러옵니다. css·js를 고치면 이 값(지금 20261020b)을 바꿔야 방문자 브라우저가 새 파일을 받습니다.
+- 캐시: `sonata-6at.html`이 `css/style.css?v=…`, `js/*.js?v=…`처럼 버전을 붙여 불러옵니다. 버전은 css·js 내용의 해시(`scripts/bump-version.js`, `npm run bump`)이고, git 커밋 때 `.githooks/pre-commit`이 자동으로 바꿉니다(새로 받은 저장소에서는 한 번 `git config core.hooksPath .githooks`). 버전이 내용과 다르면 테스트와 CI가 실패합니다.
 - `js/sim.js`: 차량 물리만(엔진·토크 컨버터·TCU·경사·접지·연료). 화면 코드가 없고, 전역 `const`(sim, step, CFG, ROAD, MODES …)를 `js/app.js`와 테스트가 함께 씁니다. 반드시 app.js보다 먼저 불러옵니다.
-- `js/app.js`: 화면 전부(IIFE 하나). 아래 '스크립트 구조' 표의 구간이 이 파일에 있습니다(SIM 구간 제외).
+- 화면 코드는 6개 파일로 나뉘어 있고, 모두 전역 이름을 함께 씁니다(IIFE 없음). 반드시 이 순서로 불러옵니다: `sim.js → course.js → dynamics.js → ui.js → gear3d.js → drive-scene.js → drive.js → features.js → main.js`. 앞 파일의 맨 위 코드가 뒤 파일의 함수를 바로 부르면 안 됩니다(함수 끌어올림이 파일을 넘지 않음). 여러 파일이 쓰는 작은 도구(`$`, `setText`)는 `ui.js` 맨 위에 있습니다.
+  - `js/ui.js`: 레버·페달·작동 요소 표·게이지 그리기, 2D 유성기어, 동력 경로, 공부 모드 1·2, 실험실
+  - `js/gear3d.js`: 3D 공통(three.js 불러오기), 단일·라비뇨 3D, 변속기 단면 3D, 오일 흐름
+  - `js/drive-scene.js`: 주행 장면(차 모델·코스 장면·밤·비눈·게임 패드·미끄럼 효과)
+  - `js/drive.js`: 주행 계기판, 핸들·차량 운동(`updateLateral`)·ESC·충돌, 도로 고르기, 주행 모드, 엔진 소리
+  - `js/features.js`: 키보드, 0→100, 기록 그래프, 잇수 설정, 퀴즈, 용어, 토크 컨버터, 변속 지도, 과제, 공유, 크게 보기, 휴대폰 조작
+  - `js/main.js`: 3D 가볍게, 느린 기기 감지, 매 프레임 루프 `frame()`
 - `.github/workflows/test.yml`: GitHub에 올릴 때마다(push, PR) `npm test`를 자동으로 돌립니다(Node 20). 결과는 저장소의 Actions 탭.
 - `js/course.js`: 코스 데이터(굽은 국도·산길·서킷, 닫힌 고리). 조절점을 구심 캐트멀-롬으로 잇고 2m 간격으로 위치·방향·곡률(오른쪽 +)·경사를 냅니다. `ROAD.course`에 달면 물리가 경사·곡률을 코스에서 읽고, 원심 가속도가 μg의 95%를 넘으면 `sim.slide`로 바깥으로 밀리며 속도를 잃습니다. 화면은 `buildCourseScene`(지형·차선·가드레일·연석·나무·경고판)과 `carPose/followCam/updateLaps/updateCourseHud/drawMiniMap`.
 - 핸들·크게 보기(js/app.js): 화면 핸들(`#wheelW`, 끌어서 회전, 놓으면 가운데로), ◀ ▶ 버튼(`#stL/#stR`, 누르고 있기)과 ←/→ 키. 핸들 각 = 조향 입력 × 450°. 직접 핸들일 때 `updateLateral`이 차의 옆 위치 `LAT.e`(차로 가운데 기준 m)와 방향 오차 `LAT.h`를 적분하고(차 곡률 tan δ/L − 도로 곡률), `ROAD.curvOverride`로 물리에 차의 곡률을, `ROAD.offroad`로 풀밭 저항(구름 저항 +0.09)을 알립니다. 가드레일·방호벽에 닿으면 속도를 절반으로. 속도 감응 조향 `steerGain`(36km/h에서 절반, 100km/h에서 약 1/9). 코스는 기본 '자동 핸들', 핸들을 잡거나 화살표를 누르면 '직접'으로 바뀌고, 직선 도로는 늘 직접입니다.
@@ -14,6 +20,8 @@
   app.js의 `updateLateral`: 직접 핸들이거나 사이드 브레이크를 당기면 4ms 간격으로 `dynStep`을 돌려 도로 기준 옆 위치 e와 방향 오차 h를 적분하고(`sim.x`는 도로 방향 성분으로 바로잡음), `ROAD.curvOverride = 0`으로 sim.js의 단순 코너 끌림을 끕니다. 자동 핸들이면 예전처럼 길을 따라갑니다. 풀밭은 μ×0.55. 벽에 닿으면 속도 절반·옆 속도 반사.
   효과: 타이어 자국(`FX.marks`, InstancedMesh 1200개, 0.3m마다), 연기(스프라이트 56개), 타이어 끌리는 소리(잡음 1.5~2kHz), 주행 화면 계기판(`#dash`, `drawDash`: RPM·속도 바늘, 기어 단, 드리프트 각/사이드 브레이크/도로 밖 표시), 사이드 브레이크(`setHB`: 버튼 3곳 + Space), '길 위로 되돌리기'.
 - `tests/dynamics.test.js`: 차량 운동 검사 6개(타이어 곡선, 저속 기하 반경, 고속 언더스티어, 사이드 브레이크 드리프트 20° 이상, 사이드 브레이크 감속, 미끄러운 길 한계).
+- `tests/browser/smoke.mjs`(`npm run test:browser`, Playwright 필요: `npm install --no-save playwright@1.47.2 && npx playwright install chromium`): 사이트를 띄워 운전·서킷·사이드 브레이크·변속기 단면·휴대폰 너비를 확인하고 스크린샷을 남깁니다. GitHub Actions의 `browser` 작업이 매번 돌리고 스크린샷을 결과물로 올립니다. WebGL이 없는 환경(이 맥의 샌드박스 등)에서는 3D 검사만 건너뜁니다(CI에서는 실패로 처리).
+- 이번에 더한 것: 드리프트 카메라(`followCam`: 진행 방향을 0.35초 늦게 따라감), ESC(`dynamics.js`, 기본 켜짐, E 키·버튼, 작동하면 출력 제한), 자동 핸들도 타이어 물리 위의 운전 보조(`autoSteer`, `roadStep`), 옆 접지 μ×0.85(`latMu`), 충돌(`checkCollisions`: 나무·기둥·표지판, 앞뒤 두 원), 밤(`applyNight`, 전조등 스포트라이트), 비·눈(`updateWeather`, 빗길·눈길에 따라), 게임 패드(`pollGamepad`, 표준 배치), ↑ 누르고 있기 가속.
 - `tests/course.test.js`: 코스 검사 6개(닫힌 고리, 겹침 없음, 산길 고도차, 경사 연동, 과속 코너 미끄러짐, 서킷 한 바퀴).
 - `tests/sim.test.js`: 물리 자동 검사 12개. `npm test`(= `node --test tests/*.test.js`, Node 18 이상). 0→100, 제동 거리, 킥다운, 내리막 엔진 브레이크, 언덕 밀림 방지, 연비, 도로 높이, 눈길 출발, 파일 참조를 확인합니다. 물리를 고친 뒤 꼭 돌리세요.
 - 외부 의존성은 three.js r128과 OrbitControls뿐이며, 처음 3D를 켤 때 CDN에서 동적으로 불러옵니다.

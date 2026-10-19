@@ -1,4 +1,4 @@
-# GitHub에 올릴 때마다 차량 물리 자동 검사(npm test)를 돌린다
+# GitHub에 올릴 때마다: 물리 자동 검사(npm test)와 화면 자동 검사(헤드리스 크롬)
 name: test
 on:
   push:
@@ -12,3 +12,19 @@ jobs:
         with:
           node-version: 20
       - run: npm test
+      - run: node scripts/bump-version.js --check
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save --no-audit --no-fund playwright@1.47.2
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/browser/smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: tests/browser/out/

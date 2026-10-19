@@ -55,3 +55,56 @@ test('미끄러운 길(μ 0.2)에서는 같은 코너에서 옆 가속도가 2m/
   const E = make(); const { o } = hold(E, 15, 0.08, 4, { mu: 0.2 });
   assert.ok(Math.abs(o.ay) < 0.2 * 9.81 * 1.1, `옆 가속도 ${o.ay}`);
 });
+
+test('ESC를 켜면 사이드 브레이크로 뒤가 돌아도 차체 미끄럼 각이 20° 아래로 잡힌다(끄면 스핀)', () => {
+  const E = make();
+  const run = esc => { const S = { vy: 0, r: 0 }; let v = 22, mb = 0;
+    for (let k = 0; k < 750; k++) { const t = k * 0.004, o = E.dynStep(S, { vx: v, delta: t < 1 ? 0.08 : 0, mu: 1, ax: 0, brake: 0, hb: t > 0.3 && t < 0.75, esc }, 0.004);
+      v = Math.max(0, v + o.dvx * 0.004); mb = Math.max(mb, Math.abs(o.beta)); } return deg(mb); };
+  const off = run(false), on = run(true);
+  assert.ok(off > 45, `ESC 끔 ${off.toFixed(1)}°`); assert.ok(on < 20, `ESC 켬 ${on.toFixed(1)}°`);
+});
+
+// 코스 + 엔진·변속기 + 타이어 물리 + 자동 핸들을 함께 돌린다
+function lapWithAuto(id, speedFactor) {
+  const ctx = vm.createContext({ console, Math });
+  const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  vm.runInContext(read('js/sim.js') + read('js/course.js') + CODE + '\n;globalThis.__E = { sim, step, requestLever, ROAD, makeCourse, roadStep, autoSteer, DYN };', ctx);
+  const E = ctx.__E, c = E.makeCourse(id); E.ROAD.course = c; E.ROAD.curvOverride = 0; E.requestLever('D');
+  const S = { vy: 0, r: 0, e: 0, h: 0 }; let t = 0, maxE = 0, lastV = 0;
+  while (E.sim.x < c.L && t < 300) {
+    const nc = c.nextCorner(E.sim.x, 150, E.sim.mu * 0.85), here = Math.abs(c.curvAt(E.sim.x));
+    let target = 45; if (here > 1 / 250) target = Math.min(target, Math.sqrt(0.85 * 0.85 * E.sim.mu * 9.81 / here) * speedFactor);
+    if (nc) target = Math.min(target, Math.sqrt((nc.v * speedFactor) ** 2 + 2 * 4 * nc.d));
+    const err = target - E.sim.v; E.sim.th = err > 0 ? Math.min(1, err * 0.4) : 0; E.sim.brake = err < -0.2;
+    E.step(0.004);
+    const k = c.curvAt(E.sim.x), ax = (E.sim.v - lastV) / 0.004; lastV = E.sim.v;
+    const r = E.roadStep(S, { vx: E.sim.v, delta: E.autoSteer(S, k, E.sim.v), mu: E.sim.mu * 0.85, ax: Math.max(-8, Math.min(6, ax)), brake: E.sim.brake ? 7.5 : 0, hb: false, esc: true }, k, 0.004);
+    E.sim.v = Math.max(0, E.sim.v + r.dvx * 0.004); E.sim.x += (r.along - E.sim.v) * 0.004;
+    t += 0.004; maxE = Math.max(maxE, Math.abs(S.e));
+  }
+  return { t, maxE, done: E.sim.x >= c.L };
+}
+
+test('자동 핸들(타이어 물리 위의 운전 보조): 권장 속도로 서킷 한 바퀴를 차로 안에서 돈다', () => {
+  const r = lapWithAuto('circuit', 1);
+  assert.ok(r.done, `${r.t.toFixed(0)}초 동안 완주 못 함`);
+  assert.ok(r.maxE < 1.2, `차로에서 최대 ${r.maxE.toFixed(2)}m 벗어남`);
+});
+
+test('서킷의 가장 급한 코너(반경 약 47m, 한계 약 78km/h)에 110km/h로 브레이크 없이 들어가면 자동 핸들이어도 바깥으로 밀려 나간다(언더스티어, ESC 끔)', () => {
+  const ctx = vm.createContext({ console, Math }), read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  vm.runInContext(read('js/sim.js') + read('js/course.js') + CODE + '\n;globalThis.__E = { sim, step, ROAD, makeCourse, roadStep, autoSteer };', ctx);
+  const E = ctx.__E, c = E.makeCourse('circuit'); E.ROAD.course = c; E.ROAD.curvOverride = 0;
+  let sMax = 0, kMax = 0; for (let i = 0; i < c.N; i++) if (Math.abs(c.kap[i]) > kMax) { kMax = Math.abs(c.kap[i]); sMax = i * c.ds; }
+  const run = kmh => {
+    Object.assign(E.sim, { lever: 'D', cur: 5, v: kmh / 3.6, x: sMax - 60, th: 0.3, brake: false, lastShift: -9 }); E.sim.we = E.sim.v / 0.334 * 1.0 * 3.51;
+    const S = { vy: 0, r: 0, e: 0, h: 0 }; let maxE = 0;
+    for (let t = 0; t < 4; t += 0.004) { E.step(0.004); const k = c.curvAt(E.sim.x);
+      const r = E.roadStep(S, { vx: E.sim.v, delta: E.autoSteer(S, k, E.sim.v), mu: E.sim.mu * 0.85, ax: 0, brake: 0, hb: false, esc: false }, k, 0.004);
+      E.sim.v = Math.max(0, E.sim.v + r.dvx * 0.004); E.sim.x += (r.along - E.sim.v) * 0.004; maxE = Math.max(maxE, Math.abs(S.e)); }
+    return maxE;
+  };
+  const slow = run(60), fast = run(110);
+  assert.ok(slow < 1, `60km/h 최대 ${slow.toFixed(2)}m`); assert.ok(fast > 3, `110km/h 최대 ${fast.toFixed(2)}m`);
+});
