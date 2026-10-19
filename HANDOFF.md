@@ -5,6 +5,7 @@
 - `css/style.css`: 모든 스타일
 - `js/sim.js`: 차량 물리만(엔진·토크 컨버터·TCU·경사·접지·연료). 화면 코드가 없고, 전역 `const`(sim, step, CFG, ROAD, MODES …)를 `js/app.js`와 테스트가 함께 씁니다. 반드시 app.js보다 먼저 불러옵니다.
 - `js/app.js`: 화면 전부(IIFE 하나). 아래 '스크립트 구조' 표의 구간이 이 파일에 있습니다(SIM 구간 제외).
+- `.github/workflows/test.yml`: GitHub에 올릴 때마다(push, PR) `npm test`를 자동으로 돌립니다(Node 20). 결과는 저장소의 Actions 탭.
 - `tests/sim.test.js`: 물리 자동 검사 12개. `npm test`(= `node --test tests/*.test.js`, Node 18 이상). 0→100, 제동 거리, 킥다운, 내리막 엔진 브레이크, 언덕 밀림 방지, 연비, 도로 높이, 눈길 출발, 파일 참조를 확인합니다. 물리를 고친 뒤 꼭 돌리세요.
 - 외부 의존성은 three.js r128과 OrbitControls뿐이며, 처음 3D를 켤 때 CDN에서 동적으로 불러옵니다.
   - `https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js`

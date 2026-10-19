@@ -1,0 +1,14 @@
+# GitHub에 올릴 때마다 차량 물리 자동 검사(npm test)를 돌린다
+name: test
+on:
+  push:
+  pull_request:
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm test
