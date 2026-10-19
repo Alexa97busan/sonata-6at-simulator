@@ -1223,8 +1223,12 @@ function twoFingerTouch(controls) { controls.touches = { ONE: -1, TWO: THREE.TOU
 const drive = { ready: false, loading: false, visible: false, dist: 0, wheel: 0, acc: 0, lastV: 0, pitch: 0, pv: 0, size: 0,
   props: [], wheels: [], strips: [], evtN: 0, tipDone: false, wheelF: 0, surf: '' };
 const DRIVE_CAMS = { back: [-4.5, 2.4, 8.5], side: [-9.5, 1.4, -1], top: [-0.01, 15, 2] };
+// 시점: 차 기준 오프셋을 차의 위치·방향으로 옮긴다. 이후 매 프레임 차를 따라 같은 상대 위치를 유지한다(끌어서 돌린 것도 유지)
 function driveCam(name) {
-  drive.camera.position.set(...DRIVE_CAMS[name]); drive.controls.target.set(0, 0.7, -1); drive.controls.update();
+  const P = drive.pose || { x: 0, y: 0, z: 0, psi: 0 }, o = new THREE.Vector3(...DRIVE_CAMS[name]).applyAxisAngle(new THREE.Vector3(0, 1, 0), P.psi);
+  drive.camera.position.set(P.x + o.x, P.y + o.y, P.z + o.z);
+  const t = new THREE.Vector3(0, 0.7, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), P.psi);
+  drive.controls.target.set(P.x + t.x, P.y + t.y, P.z + t.z); drive.controls.update(); drive.prevPose = Object.assign({}, P);
 }
 // 옆모습 단면(z: 앞 −, y: 위 +)을 폭 방향(x)으로 밀어 만든다
 function sideExtrude(T3, pts, width, arcs) {
@@ -1238,16 +1242,235 @@ function sideExtrude(T3, pts, width, arcs) {
   g.translate(0, 0, -width / 2); g.rotateY(-Math.PI / 2);
   return g;
 }
+// ---- 차 모델: 쏘나타(DN8)급 중형 세단. 전장 4.9m, 전폭 1.86m, 전고 1.45m, 휠베이스 2.84m ----
+// 옆모습 경로(z 앞 −, y 위)를 폭 방향으로 밀어 낸 뒤, 꼭짓점을 오므려 위로 좁아지는 차체(텀블홈)와 둥근 모서리를 만든다
+function sidePath(T3, cmds) {
+  const sh = new T3.Shape();
+  cmds.forEach(c => {
+    if (c[0] === 'M') sh.moveTo(c[1], c[2]); else if (c[0] === 'L') sh.lineTo(c[1], c[2]);
+    else if (c[0] === 'Q') sh.quadraticCurveTo(c[1], c[2], c[3], c[4]);
+    else if (c[0] === 'A') { sh.lineTo(c[1] - c[3], c[2] - 0.04); sh.absarc(c[1], c[2], c[3], Math.PI, 0, true); }
+  });
+  return sh;
+}
+function sideSolid(T3, cmds, width, shapeFn, bevel) {
+  const g = new T3.ExtrudeGeometry(sidePath(T3, cmds), { depth: width, bevelEnabled: bevel !== false, bevelThickness: 0.045, bevelSize: 0.045, bevelSegments: 4, curveSegments: 20 });
+  g.translate(0, 0, -width / 2); g.rotateY(-Math.PI / 2);                 // 경로의 (z, y) → 차의 (z, y), 폭 → x
+  if (shapeFn) { const P = g.attributes.position; for (let i = 0; i < P.count; i++) P.setX(i, P.getX(i) * shapeFn(P.getY(i), P.getZ(i))); }
+  g.computeVertexNormals(); return g;
+}
+function softShadowTex(T3) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
+  const gr = c.createRadialGradient(64, 64, 8, 64, 64, 62); gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.3)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = gr; c.fillRect(0, 0, 128, 128); return new T3.CanvasTexture(cv);
+}
+const PAINTS = [['오렌지', 0xd9480f], ['화이트', 0xe9e7e1], ['그레이', 0x50555c], ['블랙', 0x141518], ['블루', 0x1f3d66], ['레드', 0x8f1d21]];
+function buildCar(T3, std) {
+  const car = new T3.Group(), o = { car, wheels: [], pivots: [] };
+  car.rotation.order = 'YXZ';
+  const sh = new T3.Mesh(new T3.PlaneGeometry(2.6, 5.6), new T3.MeshBasicMaterial({ map: softShadowTex(T3), transparent: true, depthWrite: false }));
+  sh.rotation.x = -Math.PI / 2; sh.position.y = 0.03; car.add(sh);
+  const body = new T3.Group(); body.position.y = 0.45; car.add(body); o.body = body;   // 차체 기울기의 회전 중심(차축 높이 근처)
+  const paint = new T3.MeshPhysicalMaterial({ color: PAINTS[0][1], metalness: 0.55, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.08 });
+  const glass = std(0x0e141a, { metalness: 0.9, roughness: 0.05, envMapIntensity: 1.2 }), black = std(0x15171a, { roughness: 0.5 }), gloss = std(0x0b0c0e, { metalness: 0.7, roughness: 0.15 });
+  const chrome = std(0xdfe3e8, { metalness: 1, roughness: 0.12 }), trim = std(0x26282c, { roughness: 0.7 });
+  o.paint = paint;
+  const part = (geo, mat, x, y, z, rx) => { const m = new T3.Mesh(geo, mat); m.position.set(x, y - 0.45, z); if (rx) m.rotation.x = rx; body.add(m); return m; };
+  const WB = 1.42, R = CFG.tireR;
+  // 차체: 범퍼·보닛·트렁크와 휠 아치. 위로 갈수록, 앞뒤 끝으로 갈수록 폭을 줄인다
+  part(sideSolid(T3, [['M', -2.36, 0.30], ['A', -WB, R, 0.43], ['L', 0.99, 0.30], ['A', WB, R, 0.43], ['L', 2.33, 0.31],
+    ['Q', 2.47, 0.34, 2.46, 0.55], ['Q', 2.45, 0.78, 2.36, 0.86], ['Q', 2.25, 0.98, 1.95, 1.0], ['L', 1.62, 0.99], ['L', -0.88, 0.95],
+    ['Q', -1.6, 0.92, -2.18, 0.80], ['Q', -2.40, 0.74, -2.47, 0.60], ['Q', -2.50, 0.40, -2.36, 0.30]], 1.76,
+    (y, z) => { let k = 1; if (y > 0.78) k *= 1 - 0.07 * Math.min(1, (y - 0.78) / 0.22); const az = Math.abs(z); if (az > 1.85) k *= 1 - 0.13 * Math.pow(Math.min(1, (az - 1.85) / 0.62), 2);
+      if (y < 0.42) k *= 1 - 0.05 * Math.min(1, (0.42 - y) / 0.12); return k; }), paint, 0, 0, 0);
+  // 유리 지붕(그린하우스): 앞유리 경사, 둥근 지붕, 패스트백 뒷유리. 위로 갈수록 20% 좁아짐
+  const gh = y => 1 - 0.2 * clamp((y - 0.96) / 0.48, 0, 1);
+  part(sideSolid(T3, [['M', -0.88, 0.94], ['L', -0.12, 1.41], ['Q', 0.55, 1.47, 1.05, 1.40], ['Q', 1.45, 1.20, 1.66, 0.98], ['L', -0.88, 0.94]], 1.50, (y) => gh(y)), glass, 0, 0, 0);
+  part(sideSolid(T3, [['M', -0.04, 1.405], ['Q', 0.55, 1.465, 1.02, 1.395], ['L', 1.0, 1.425], ['Q', 0.55, 1.495, -0.04, 1.432]], 1.17, null, false), paint, 0, 0, 0);   // 지붕 패널
+  // 필러: A(앞유리 양옆), B(검은 유광), C(뒷유리 양옆, 굵게)
+  const pillar = (z0, y0, z1, y1, w, mat) => { const len = Math.hypot(z1 - z0, y1 - y0), ym = (y0 + y1) / 2, half = 0.75 * gh(ym);
+    [-1, 1].forEach(s => part(new T3.BoxGeometry(w, 0.05, len), mat, s * (half - w / 2 + 0.01), ym, (z0 + z1) / 2, -Math.atan2(y1 - y0, z1 - z0))); };
+  pillar(-0.86, 0.95, -0.12, 1.41, 0.07, paint); pillar(1.05, 1.40, 1.64, 0.99, 0.16, paint);
+  [-1, 1].forEach(s => part(new T3.BoxGeometry(0.03, 0.42, 0.07), gloss, s * 0.69, 1.17, 0.50));
+  [-1, 1].forEach(s => part(new T3.BoxGeometry(0.012, 0.02, 2.46), chrome, s * 0.80, 0.975, 0.37));                    // 벨트라인 크롬
+  // 사이드미러, 문 이음매, 손잡이, 사이드 스커트
+  [-1, 1].forEach(s => { const m = part(new T3.SphereGeometry(0.1, 16, 10), paint, s * 0.99, 1.0, -0.70); m.scale.set(1.1, 0.75, 1.4);
+    part(new T3.BoxGeometry(0.12, 0.03, 0.06), black, s * 0.88, 0.97, -0.70); });
+  [-0.82, 0.47, 1.55].forEach(z => [-1, 1].forEach(s => part(new T3.BoxGeometry(0.006, 0.55, 0.008), trim, s * 0.928, 0.66, z)));
+  [-0.25, 1.05].forEach(z => [-1, 1].forEach(s => part(new T3.BoxGeometry(0.012, 0.03, 0.15), chrome, s * 0.935, 0.86, z)));
+  [-1, 1].forEach(s => part(new T3.BoxGeometry(0.04, 0.07, 1.95), black, s * 0.90, 0.33, 0));
+  // 앞: 캐스케이딩 그릴, 가늘고 긴 헤드램프, 보닛 끝 주간주행등, 아래 흡기구, 번호판
+  const grille = new T3.Shape(); grille.moveTo(-0.62, 0.38); grille.lineTo(0.62, 0.38); grille.lineTo(0.52, 0.66); grille.lineTo(-0.52, 0.66); grille.lineTo(-0.62, 0.38);
+  const gg = new T3.ExtrudeGeometry(grille, { depth: 0.06, bevelEnabled: false }); part(gg, gloss, 0, 0, -2.52);
+  for (let i = 0; i < 5; i++) part(new T3.BoxGeometry(1.1 - i * 0.04, 0.008, 0.02), chrome, 0, 0.42 + i * 0.05, -2.47);
+  o.head = std(0xffffff, { emissive: 0xfff4d6, emissiveIntensity: 0.9 });
+  [-1, 1].forEach(s => { const h = part(new T3.BoxGeometry(0.42, 0.065, 0.12), o.head, s * 0.56, 0.73, -2.33); h.rotation.y = -s * 0.25;
+    part(new T3.BoxGeometry(0.46, 0.012, 0.02), o.head, s * 0.36, 0.805, -2.24); });
+  part(new T3.BoxGeometry(1.3, 0.09, 0.05), black, 0, 0.33, -2.40);
+  part(new T3.BoxGeometry(0.52, 0.11, 0.015), std(0xf2f2f2), 0, 0.47, -2.52);
+  // 뒤: 가로로 이어진 테일램프, 램프 묶음, 후진등, 디퓨저와 머플러, 번호판
+  o.tail = std(0x7a1010, { emissive: 0x550000, roughness: 0.3 }); o.rev = std(0xdddddd, { emissive: 0x000000 });
+  part(new T3.BoxGeometry(1.62, 0.04, 0.03), o.tail, 0, 0.885, 2.405);
+  [-1, 1].forEach(s => { const t = part(new T3.BoxGeometry(0.34, 0.08, 0.06), o.tail, s * 0.68, 0.86, 2.36); t.rotation.y = s * 0.3; });
+  [-1, 1].forEach(s => part(new T3.BoxGeometry(0.12, 0.05, 0.02), o.rev, s * 0.5, 0.52, 2.46));
+  part(new T3.BoxGeometry(1.2, 0.08, 0.06), black, 0, 0.34, 2.43);
+  const pipe = new T3.CylinderGeometry(0.04, 0.04, 0.1, 16); pipe.rotateX(Math.PI / 2);
+  [-1, 1].forEach(s => part(pipe, chrome, s * 0.45, 0.34, 2.47));
+  part(new T3.BoxGeometry(0.52, 0.11, 0.015), std(0xf2f2f2), 0, 0.64, 2.465);
+  // 휠 하우스 안쪽(검은 라이너): 아치 속으로 반대편이 비쳐 보이지 않게
+  const liner = new T3.CylinderGeometry(0.45, 0.45, 1.62, 24, 1, true, -Math.PI / 2, Math.PI); liner.rotateZ(Math.PI / 2);
+  [-WB, WB].forEach(z => part(liner, std(0x0b0b0c, { side: T3.DoubleSide, roughness: 1 }), 0, R, z));
+  // 바퀴: 둥근 옆면 타이어 + 5스포크 알로이 휠, 돌지 않는 브레이크 디스크와 빨간 캘리퍼
+  const tireG = new T3.LatheGeometry([[0.22, -0.105], [0.3, -0.108], [0.325, -0.095], [R, -0.06], [R, 0.06], [0.325, 0.095], [0.3, 0.108], [0.22, 0.105]].map(([r, w]) => new T3.Vector2(r, w)), 40);
+  tireG.rotateZ(Math.PI / 2);
+  const tireM = std(0x131313, { roughness: 0.92 }), rimM = std(0xc8ccd2, { metalness: 0.85, roughness: 0.25 }), barrel = new T3.CylinderGeometry(0.212, 0.212, 0.2, 28, 1, true); barrel.rotateZ(Math.PI / 2);
+  const discG = new T3.CylinderGeometry(0.165, 0.165, 0.025, 28); discG.rotateZ(Math.PI / 2);
+  [[-0.81, -WB], [0.81, -WB], [-0.81, WB], [0.81, WB]].forEach(([x, z], i) => {
+    const side = Math.sign(x), pv = new T3.Group(); pv.position.set(x, R, z); car.add(pv); if (i < 2) o.pivots.push(pv);
+    const w = new T3.Group(); pv.add(w); o.wheels.push(w);
+    w.add(new T3.Mesh(tireG, tireM)); w.add(new T3.Mesh(barrel, std(0x2a2c30, { side: T3.DoubleSide })));
+    const lip = new T3.Mesh(new T3.RingGeometry(0.2, 0.225, 32), rimM); lip.rotation.y = side * Math.PI / 2; lip.position.x = side * 0.1; w.add(lip);
+    for (let k = 0; k < 5; k++) { const sp = new T3.Mesh(new T3.BoxGeometry(0.025, 0.16, 0.05), rimM), a = k * TAU / 5;
+      sp.position.set(side * 0.095, Math.cos(a) * 0.125, Math.sin(a) * 0.125); sp.rotation.x = -a; w.add(sp); }
+    const cap = new T3.Mesh(new T3.CylinderGeometry(0.05, 0.05, 0.03, 20), rimM); cap.rotation.z = Math.PI / 2; cap.position.x = side * 0.1; w.add(cap);
+    const disc = new T3.Mesh(discG, std(0x6d7076, { metalness: 0.8, roughness: 0.4 })); disc.position.x = side * 0.035; pv.add(disc);
+    const cal = new T3.Mesh(new T3.BoxGeometry(0.05, 0.1, 0.13), std(0xb3261e, { roughness: 0.4 })); cal.position.set(side * 0.055, 0.1, z < 0 ? 0.09 : -0.09); pv.add(cal);
+  });
+  return o;
+}
+// 금속·도장이 비치도록 하늘 그라데이션 + 해를 환경맵으로
+function skyEnv(T3, renderer) {
+  const es = new T3.Scene(), sg = new T3.SphereGeometry(100, 32, 16), col = [], P = sg.attributes.position;
+  for (let i = 0; i < P.count; i++) { const t = P.getY(i) / 100; const c = t > 0 ? [0.55 + 0.3 * t, 0.65 + 0.25 * t, 0.78 + 0.2 * t] : [0.25 + 0.1 * t, 0.27 + 0.1 * t, 0.24 + 0.1 * t]; col.push(...c); }
+  sg.setAttribute('color', new T3.Float32BufferAttribute(col, 3));
+  es.add(new T3.Mesh(sg, new T3.MeshBasicMaterial({ vertexColors: true, side: T3.BackSide })));
+  const sun = new T3.Mesh(new T3.SphereGeometry(8, 16, 8), new T3.MeshBasicMaterial({ color: 0xffffff })); sun.position.set(-40, 60, 30); es.add(sun);
+  const pm = new T3.PMREMGenerator(renderer), tex = pm.fromScene(es, 0.02).texture; pm.dispose(); return tex;
+}
+
+// ---- 코스 장면: 지형(높이장), 도로, 차선, 가드레일, 연석, 나무, 출발선 ----
+function seeded(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+function buildCourseScene(T3, c, std) {
+  const g = new T3.Group(), def = c.def, w = def.width, N = c.N, rnd = seeded(c.L | 0);
+  const ss = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const right = i => [Math.cos(c.psi[i]), -Math.sin(c.psi[i])];        // 앞 방향(−sinψ, −cosψ)의 오른쪽
+  // 가장 가까운 도로점(성긴 탐색 후 근처를 다시 봄)
+  const nearest = (x, z) => { let bi = 0, bd = Infinity; for (let i = 0; i < N; i += 4) { const d = (c.x[i] - x) ** 2 + (c.z[i] - z) ** 2; if (d < bd) { bd = d; bi = i; } }
+    for (let j = -4; j <= 4; j++) { const i = (bi + j + N) % N, d = (c.x[i] - x) ** 2 + (c.z[i] - z) ** 2; if (d < bd) { bd = d; bi = i; } } return [bi, Math.sqrt(bd)]; };
+  const A = { country: 9, mountain: 26, circuit: 1.2 }[def.kind === 'road' ? 'country' : def.kind];
+  const hills = (x, z) => A * (Math.sin(x * 0.011 + 1.3) * Math.cos(z * 0.009) + 0.5 * Math.sin(x * 0.027) * Math.sin(z * 0.023 + 0.7));
+  const terrainH = (x, z) => { const [i, d] = nearest(x, z), b = ss(w / 2 + 2, w / 2 + 55, d);
+    return c.y[i] - 0.35 + b * (hills(x, z) + (def.kind === 'mountain' ? (d - w / 2) * 0.18 : 0)); };
+  // 지형: 코스 둘레 220m까지 덮는 격자. 색은 높이·경사·도로와의 거리로
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < N; i++) { x0 = Math.min(x0, c.x[i]); x1 = Math.max(x1, c.x[i]); z0 = Math.min(z0, c.z[i]); z1 = Math.max(z1, c.z[i]); }
+  const M = 220, nx = 170, nz = Math.round(nx * (z1 - z0 + 2 * M) / (x1 - x0 + 2 * M));
+  const tg = new T3.PlaneGeometry(x1 - x0 + 2 * M, z1 - z0 + 2 * M, nx, nz); tg.rotateX(-Math.PI / 2); tg.translate((x0 + x1) / 2, 0, (z0 + z1) / 2);
+  const TP = tg.attributes.position, tcol = [];
+  for (let i = 0; i < TP.count; i++) {
+    const x = TP.getX(i), z = TP.getZ(i), [ni, d] = nearest(x, z), h = terrainH(x, z); TP.setY(i, h);
+    const n = 0.85 + 0.15 * rnd(), rock = def.kind === 'mountain' ? ss(8, 30, h - c.y[ni]) : 0, sh = 1 - ss(w / 2, w / 2 + 2.5, d);
+    const grass = [0.33 * n, 0.45 * n, 0.24 * n], stone = [0.46 * n, 0.45 * n, 0.42 * n], gravel = [0.5, 0.48, 0.44];
+    const col = grass.map((v, k) => v * (1 - rock) + stone[k] * rock).map((v, k) => v * (1 - sh) + gravel[k] * sh); tcol.push(...col);
+  }
+  tg.setAttribute('color', new T3.Float32BufferAttribute(tcol, 3)); tg.computeVertexNormals();
+  const terrainMat = std(0xffffff, { vertexColors: true, roughness: 1 }), terrain = new T3.Mesh(tg, terrainMat); g.add(terrain);
+  // 띠 만들기: 가운데 선에서 오른쪽으로 a~b만큼 떨어진 띠(only로 일부 구간만)
+  const ribbon = (a, b, dy, mat, only, colorFn) => {
+    const pos = [], col = [];
+    for (let i = 0; i < N; i++) {
+      const j = (i + 1) % N; if (only && !only(i)) continue;
+      const [ri, rj] = [right(i), right(j)], P = (k, r, off) => [c.x[k] + r[0] * off, c.y[k] + dy, c.z[k] + r[1] * off];
+      const q = [P(i, ri, a), P(i, ri, b), P(j, rj, a), P(j, rj, b)];
+      pos.push(...q[0], ...q[1], ...q[2], ...q[1], ...q[3], ...q[2]);          // 위를 보는 면
+      if (colorFn) { const cc = colorFn(i); for (let t = 0; t < 6; t++) col.push(...cc); }
+    }
+    const geo = new T3.BufferGeometry(); geo.setAttribute('position', new T3.Float32BufferAttribute(pos, 3));
+    if (colorFn) geo.setAttribute('color', new T3.Float32BufferAttribute(col, 3));
+    geo.computeVertexNormals(); const m = new T3.Mesh(geo, mat); g.add(m); return m;
+  };
+  const roadM = std(0x3a3d42, { roughness: 0.92 }), whiteM = std(0xeeeeee, { roughness: 0.6 }), yellowM = std(0xf2c230, { roughness: 0.6 });
+  ribbon(-w / 2, w / 2, 0.02, roadM);
+  if (def.kind === 'circuit') {
+    ribbon(-w / 2 + 0.3, -w / 2 + 0.55, 0.035, whiteM); ribbon(w / 2 - 0.55, w / 2 - 0.3, 0.035, whiteM);
+    // 연석: 코너(반경 110m 아래)의 양쪽 바깥, 2m마다 빨강·흰색
+    const sharp = i => Math.abs(c.kap[i]) > 1 / 110 || Math.abs(c.kap[(i + 6) % N]) > 1 / 110 || Math.abs(c.kap[(i - 6 + N) % N]) > 1 / 110;
+    const curbM = std(0xffffff, { vertexColors: true, roughness: 0.7 }), rw = i => (i % 2 ? [0.85, 0.12, 0.12] : [0.95, 0.95, 0.95]);
+    ribbon(w / 2, w / 2 + 1.2, 0.06, curbM, sharp, rw); ribbon(-w / 2 - 1.2, -w / 2, 0.06, curbM, sharp, rw);
+    // 출발선(바둑판), 메인 직선의 피트 벽과 관람석
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 16; const cx = cv.getContext('2d');
+    for (let i = 0; i < 16; i++) for (let j = 0; j < 2; j++) { cx.fillStyle = (i + j) % 2 ? '#111' : '#fff'; cx.fillRect(i * 8, j * 8, 8, 8); }
+    const fin = new T3.Mesh(new T3.PlaneGeometry(w, 1.5), new T3.MeshStandardMaterial({ map: new T3.CanvasTexture(cv), roughness: 0.8 }));
+    fin.rotation.set(-Math.PI / 2, 0, 0); fin.position.set(c.x[0], c.y[0] + 0.04, c.z[0]); g.add(fin);
+    const wall = new T3.Mesh(new T3.BoxGeometry(0.5, 1.1, 360), std(0xd9dde2)); wall.position.set(c.x[0] - w / 2 - 4, c.y[0] + 0.55, -180); g.add(wall);
+    const stand = new T3.Mesh(new T3.BoxGeometry(14, 7, 160), std(0x8a8f96)); stand.position.set(c.x[0] - w / 2 - 22, c.y[0] + 3.5, -120); stand.rotation.z = -0.35; g.add(stand);
+    const roof = new T3.Mesh(new T3.BoxGeometry(18, 0.4, 164), std(0xb8332e)); roof.position.set(c.x[0] - w / 2 - 22, c.y[0] + 9.5, -120); g.add(roof);
+    const gantry = new T3.Group(); [-1, 1].forEach(sd => { const p = new T3.Mesh(new T3.BoxGeometry(0.4, 6, 0.4), std(0x2a2c30)); p.position.set(sd * (w / 2 + 1), 3, 0); gantry.add(p); });
+    const beam = new T3.Mesh(new T3.BoxGeometry(w + 2.4, 0.9, 0.4), std(0xd9480f)); beam.position.y = 6; gantry.add(beam);
+    gantry.position.set(c.x[0], c.y[0], c.z[0]); gantry.rotation.y = c.psi[0]; g.add(gantry);
+  } else {
+    ribbon(-0.2, -0.08, 0.035, yellowM); ribbon(0.08, 0.2, 0.035, yellowM);              // 중앙선(노란 겹실선)
+    ribbon(-w / 2 + 0.15, -w / 2 + 0.3, 0.035, whiteM); ribbon(w / 2 - 0.3, w / 2 - 0.15, 0.035, whiteM);
+  }
+  // 가드레일: 산길은 양쪽 전부, 국도는 굽은 곳만
+  if (def.kind !== 'circuit') {
+    const need = def.kind === 'mountain' ? null : i => Math.abs(c.kap[i]) > 1 / 220;
+    const railM = std(0xb7bcc2, { metalness: 0.7, roughness: 0.35, side: T3.DoubleSide });
+    [-1, 1].forEach(sd => {
+      const off = sd * (w / 2 + 0.9), pos = [];
+      for (let i = 0; i < N; i++) { if (need && !need(i)) continue; const j = (i + 1) % N, ri = right(i), rj = right(j);
+        const p = (k, r, y) => [c.x[k] + r[0] * off, c.y[k] + y, c.z[k] + r[1] * off];
+        const a = p(i, ri, 0.45), b = p(i, ri, 0.8), cc = p(j, rj, 0.45), d = p(j, rj, 0.8); pos.push(...a, ...cc, ...b, ...b, ...cc, ...d); }
+      if (!pos.length) return;
+      const geo = new T3.BufferGeometry(); geo.setAttribute('position', new T3.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals(); g.add(new T3.Mesh(geo, railM));
+      const idx = []; for (let i = 0; i < N; i += 2) if (!need || need(i)) idx.push(i);
+      const posts = new T3.InstancedMesh(new T3.BoxGeometry(0.12, 0.8, 0.12), std(0x8d9299, { metalness: 0.6 }), idx.length), m4 = new T3.Matrix4();
+      idx.forEach((i, k) => { const r = right(i); m4.makeTranslation(c.x[i] + r[0] * off, c.y[i] + 0.4, c.z[i] + r[1] * off); posts.setMatrixAt(k, m4); }); g.add(posts);
+    });
+  }
+  // 나무: 도로에서 6m 넘게 떨어진 곳에만, 지형 높이에 맞춰 심는다
+  const trees = []; let tries = 0;
+  const want = def.kind === 'circuit' ? 260 : 650;
+  while (trees.length < want && tries++ < want * 6) {
+    const x = x0 - M * 0.8 + rnd() * (x1 - x0 + 1.6 * M), z = z0 - M * 0.8 + rnd() * (z1 - z0 + 1.6 * M), [, d] = nearest(x, z);
+    if (d < w / 2 + 6 + (def.kind === 'circuit' ? 14 : 0)) continue;
+    trees.push([x, terrainH(x, z), z, 0.7 + rnd() * 0.8]);
+  }
+  const trunkI = new T3.InstancedMesh(new T3.CylinderGeometry(0.18, 0.26, 2.2, 7), std(0x5f4632), trees.length);
+  const crownI = new T3.InstancedMesh(new T3.ConeGeometry(1.6, 4.4, 9), std(0x2e5e3c, { roughness: 0.9 }), trees.length);
+  const m4 = new T3.Matrix4(), q = new T3.Quaternion(), S = new T3.Vector3(), V = new T3.Vector3();
+  trees.forEach(([x, y, z, k], i) => { S.set(k, k, k); V.set(x, y + 1.1 * k, z); m4.compose(V, q, S); trunkI.setMatrixAt(i, m4); V.set(x, y + 3.9 * k, z); m4.compose(V, q, S); crownI.setMatrixAt(i, m4); });
+  g.add(trunkI); g.add(crownI);
+  // 굽은 길 경고판: 반경 70m 아래 코너의 40m 앞, 바깥쪽
+  if (def.kind !== 'circuit') {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64; const cx = cv.getContext('2d');
+    cx.fillStyle = '#f2c230'; cx.fillRect(0, 0, 128, 64); cx.fillStyle = '#111'; for (let k = 0; k < 3; k++) { cx.beginPath(); cx.moveTo(18 + k * 36, 12); cx.lineTo(40 + k * 36, 32); cx.lineTo(18 + k * 36, 52); cx.lineTo(30 + k * 36, 52); cx.lineTo(52 + k * 36, 32); cx.lineTo(30 + k * 36, 12); cx.fill(); }
+    const tex = new T3.CanvasTexture(cv), signM = new T3.MeshStandardMaterial({ map: tex, side: T3.DoubleSide }), signMf = signM.clone(); signMf.map = tex.clone(); signMf.map.repeat.x = -1; signMf.map.offset.x = 1; signMf.map.needsUpdate = true;
+    for (let i = 0; i < N; i++) {
+      const k0 = c.kap[i], k1 = c.kap[(i - 1 + N) % N], ahead = Math.round(40 / c.ds);
+      if (Math.abs(k0) > 1 / 70 && Math.abs(k1) <= 1 / 70) {
+        const j = (i - ahead + N) % N, r = right(j), sd = -Math.sign(k0), off = sd * (w / 2 + 2.2);
+        const sign = new T3.Group(), board = new T3.Mesh(new T3.PlaneGeometry(1.4, 0.7), k0 > 0 ? signM : signMf), pole = new T3.Mesh(new T3.BoxGeometry(0.08, 1.6, 0.08), std(0x9aa0a6));
+        board.position.y = 1.8; pole.position.y = 0.8; sign.add(board); sign.add(pole);
+        sign.position.set(c.x[j] + r[0] * off, c.y[j], c.z[j] + r[1] * off); sign.rotation.y = c.psi[j]; g.add(sign);
+      }
+    }
+  }
+  g.userData = { terrainMat, roadM };
+  return g;
+}
+
 function buildDrive() {
   const T3 = THREE, box = $('box3D');
   const renderer = new T3.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(PR()); renderer.outputEncoding = T3.sRGBEncoding;
   box.appendChild(renderer.domElement);
-  const scene = new T3.Scene(), sky = new T3.Color(0x1c1d20);
+  const scene = new T3.Scene(), sky = new T3.Color(0xa9bccf);
   scene.background = sky; scene.fog = new T3.Fog(sky, 30, 110);
-  const camera = new T3.PerspectiveCamera(45, 16 / 9, 0.1, 400);
-  scene.add(new T3.HemisphereLight(0xffffff, 0x334455, 0.85));
-  const sunL = new T3.DirectionalLight(0xffffff, 0.8); sunL.position.set(-20, 30, 10); scene.add(sunL);
+  const camera = new T3.PerspectiveCamera(45, 16 / 9, 0.1, 1500);
+  scene.add(new T3.HemisphereLight(0xe6eef5, 0x4a5a40, 0.75));
+  const sunL = new T3.DirectionalLight(0xfff6e8, 1.0); sunL.position.set(-40, 60, 30); scene.add(sunL);
+  scene.environment = skyEnv(T3, renderer);
   const root = new T3.Group(); scene.add(root);
   const std = (color, o) => new T3.MeshStandardMaterial(Object.assign({ color, roughness: 0.7, metalness: 0.1 }, o));
   // 길이 방향으로 잘게 나눈 띠. 매 프레임 도로 높이(ROAD)에 맞춰 꼭짓점 높이를 바꿔 언덕 모양을 만든다(앞 200m, 뒤 60m)
@@ -1256,7 +1479,7 @@ function buildDrive() {
     const m = new T3.Mesh(geo, mat); m.position.set(x, y, 0); root.add(m); drive.strips.push(geo); return m;
   };
   // 땅과 도로: 차는 오른쪽 차로(x −2~2) 가운데. 중앙선은 x=−2
-  drive.groundMat = std(0x1f2b24); drive.roadMat = std(0x2e3033, { roughness: 0.9 });
+  drive.groundMat = std(0x4f6b3e); drive.roadMat = std(0x3a3d42, { roughness: 0.92 });
   flat(400, drive.groundMat, 0, 0);
   flat(8.4, drive.roadMat, -2, 0.01);
   const white = std(0xe9e9ea, { roughness: 0.5 });
@@ -1279,38 +1502,10 @@ function buildDrive() {
   const crown = new T3.Mesh(new T3.ConeGeometry(1.1, 2.6, 10), std(0x2f6b45)); crown.position.y = 2.6; tree.add(crown);
   tree.position.x = 6.5; add(tree, 17, 8);
   const tree2 = tree.clone(); tree2.position.x = -10.5; tree2.scale.setScalar(1.25); add(tree2, 23, 6, 9);
-  // 차: 전장 4.9m, 전폭 1.84m, 휠베이스 2.86m 정도의 세단. 옆모습 단면을 밀어 만든다
-  const car = new T3.Group(); root.add(car);
-  const shadow = new T3.Mesh(new T3.PlaneGeometry(2.1, 5.0), new T3.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
-  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.03; car.add(shadow);
-  const body = new T3.Group(); body.position.y = 0.45; car.add(body);          // 차체 기울기의 회전 중심(차축 높이 근처)
-  const paint = std(0xe8590c, { metalness: 0.45, roughness: 0.35 }), glass = std(0x1d2a35, { metalness: 0.6, roughness: 0.15 });
-  const part = (geo, mat, x, y, z) => { const m = new T3.Mesh(geo, mat); m.position.set(x, y - 0.45, z); body.add(m); return m; };
-  const WB = 1.43, AR = 0.42;                                                 // 앞·뒤 차축 위치, 휠 아치 반지름
-  part(sideExtrude(T3, [[-2.40, 0.30], 'arc', 'arc', [2.36, 0.30], [2.42, 0.55], [2.38, 0.80], [2.22, 0.95], [1.70, 0.99], [-0.95, 0.96], [-2.15, 0.83], [-2.42, 0.70], [-2.46, 0.48]],
-    1.74, [[-WB, CFG.tireR, AR], [WB, CFG.tireR, AR]]), paint, 0, 0, 0);
-  part(sideExtrude(T3, [[-0.95, 0.94], [1.72, 0.97], [0.95, 1.40], [-0.15, 1.42]], 1.52, []), glass, 0, 0, 0);       // 유리(앞·뒤 경사)
-  part(sideExtrude(T3, [[-0.10, 1.40], [0.92, 1.38], [0.90, 1.43], [-0.08, 1.45]], 1.42, []), paint, 0, 0, 0);       // 지붕
-  part(new T3.BoxGeometry(1.66, 0.46, 0.08), paint, 0, 1.17, 0.38);                                    // B 필러
-  const mirror = new T3.BoxGeometry(0.2, 0.12, 0.14);
-  [-1.0, 1.0].forEach(x => part(mirror, paint, x, 1.02, -0.8));                                                          // 사이드미러
-  const head = std(0xffffff, { emissive: 0xfff4d6, emissiveIntensity: 0.8 });
-  [-0.6, 0.6].forEach(x => part(new T3.BoxGeometry(0.42, 0.11, 0.06), head, x, 0.76, -2.44));
-  drive.tail = std(0x7a1010, { emissive: 0x550000 }); drive.rev = std(0xdddddd, { emissive: 0x000000 });
-  [-0.62, 0.62].forEach(x => part(new T3.BoxGeometry(0.46, 0.12, 0.06), drive.tail, x, 0.84, 2.43));
-  [-0.28, 0.28].forEach(x => part(new T3.BoxGeometry(0.14, 0.09, 0.06), drive.rev, x, 0.84, 2.43));
-  // 바퀴: 반지름 0.334m(215/55R17). 바큇살 두 개로 회전이 보이게 한다
-  const tireG = new T3.CylinderGeometry(CFG.tireR, CFG.tireR, 0.22, 28); tireG.rotateZ(Math.PI / 2);
-  const rimG = new T3.CylinderGeometry(0.21, 0.21, 0.23, 20); rimG.rotateZ(Math.PI / 2);
-  const spokeG = new T3.BoxGeometry(0.24, 0.4, 0.07), tireM = std(0x151515, { roughness: 0.9 }), rimM = std(0xc9ccd1, { metalness: 0.6, roughness: 0.3 }), spokeM = std(0x5a5d62);
-  drive.pivots = [];
-  [[-0.82, -WB], [0.82, -WB], [-0.82, WB], [0.82, WB]].forEach(([x, z], i) => {
-    const pv = new T3.Group(); pv.position.set(x, CFG.tireR, z); car.add(pv); if (i < 2) drive.pivots.push(pv);   // 앞바퀴는 조향 축
-    const w = new T3.Group();
-    w.add(new T3.Mesh(tireG, tireM)); w.add(new T3.Mesh(rimG, rimM));
-    const s1 = new T3.Mesh(spokeG, spokeM), s2 = new T3.Mesh(spokeG, spokeM); s2.rotation.x = Math.PI / 2; w.add(s1); w.add(s2);
-    pv.add(w); drive.wheels.push(w);
-  });
+  // 차(js/app.js의 buildCar). 직선 도로에서는 원점에, 코스에서는 코스 위 위치로 옮긴다
+  const C = buildCar(T3, std), car = C.car, body = C.body; scene.add(car);
+  Object.assign(drive, { wheels: C.wheels, pivots: C.pivots, tail: C.tail, rev: C.rev, paint: C.paint, std, courseScenes: {} });
+  setPaint(PAINT.i);
   const controls = new T3.OrbitControls(camera, renderer.domElement);
   controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.08;
   controls.minDistance = 4; controls.maxDistance = 30; controls.maxPolarAngle = Math.PI / 2 - 0.04;
@@ -1323,7 +1518,7 @@ function buildDrive() {
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    if (ray.intersectObject(body, true).length || ray.intersectObjects(drive.wheels, true).length) goTrans();
+    if (ray.intersectObject(car, true).length) goTrans();
   });
   Object.assign(drive, { renderer, scene, camera, controls, body, root, car, ready: true });
   driveCam('back');
@@ -1367,14 +1562,29 @@ function renderDrive(dt) {
   if (w > 0 && h > 0 && w * 10000 + h !== drive.size) { drive.size = w * 10000 + h; drive.renderer.setSize(w, h, false); drive.camera.aspect = w / h; drive.camera.updateProjectionMatrix(); }
   const fov = 45 + (RM.matches ? 0 : Math.min(14, Math.abs(v) * 3.6 * 0.07));  // 빠를수록 시야를 넓혀 속도감을 더한다
   if (Math.abs(drive.camera.fov - fov) > 0.05) { drive.camera.fov = fov; drive.camera.updateProjectionMatrix(); }
-  // 도로 높이: 차 위치(sim.x)를 0으로 두고, 지역 z의 점은 도로 거리 s = x − z (앞이 −z)
-  const x = sim.x, H0 = ROAD.heightAt(x), hAt = z => ROAD.heightAt(x - z) - H0;
-  drive.strips.forEach(geo => {
-    const P = geo.attributes.position;
-    for (let i = 0; i < P.count; i++) P.setY(i, hAt(P.getZ(i)));
-    P.needsUpdate = true; geo.computeVertexNormals();
-  });
-  drive.car.rotation.x = Math.atan(ROAD.gradeAt(x));                           // 차는 발밑 경사만큼 기운다
+  // 차의 자세(위치·방향)를 정하고 장면을 맞춘다
+  const P = carPose(); drive.pose = P;
+  const C = COURSE.c;
+  drive.root.visible = !C;
+  Object.entries(drive.courseScenes).forEach(([id, g]) => { g.visible = !!C && id === C.id; });
+  if (C && !drive.courseScenes[C.id]) { drive.courseScenes[C.id] = buildCourseScene(THREE, C, drive.std); drive.scene.add(drive.courseScenes[C.id]); drive.surf = ''; }
+  const fogFar = C ? 520 : 110; if (drive.scene.fog.far !== fogFar) { drive.scene.fog.far = fogFar; drive.scene.fog.near = C ? 80 : 30; }
+  if (!C) {
+    // 직선 도로: 차는 원점에 두고 길과 주변을 흘려 보낸다. 지역 z의 점은 도로 거리 s = x − z (앞이 −z)
+    const x = sim.x, H0 = ROAD.heightAt(x), hAt = z => ROAD.heightAt(x - z) - H0;
+    drive.strips.forEach(geo => {
+      const Pg = geo.attributes.position;
+      for (let i = 0; i < Pg.count; i++) Pg.setY(i, hAt(Pg.getZ(i)));
+      Pg.needsUpdate = true; geo.computeVertexNormals();
+    });
+    drive.props.forEach(p => {
+      const z = ((p.base + x) % p.L + p.L) % p.L - (p.L - 20);
+      p.o.position.z = z; p.o.position.y = p.y0 + hAt(z);
+      if (p.flat) p.o.rotation.x = -Math.PI / 2 + Math.atan(ROAD.gradeAt(x - z));
+    });
+  }
+  drive.car.position.set(P.x, P.y, P.z); drive.car.rotation.y = P.psi; drive.car.rotation.x = Math.atan(P.grade);
+  followCam(P);
   drive.body.rotation.x = drive.pitch;
   // 바퀴: 왼쪽(0, 2)·오른쪽(1, 3) 속도가 회전 반경에 따라 다르다. 앞바퀴는 헛돌면 더 돈다
   const fl = 1 + STEER.k, fr = 1 - STEER.k;
@@ -1386,17 +1596,15 @@ function renderDrive(dt) {
   const turning = isFinite(STEER.R) && Math.abs(v) > 0.3;
   $('dTurnBox').hidden = !turning;
   if (turning) setText('dTurn', '반경 ' + STEER.R.toFixed(0) + 'm · 바깥 바퀴 +' + (Math.abs(STEER.k) * 100).toFixed(0) + '% · ' + (Math.abs(ay) / G0).toFixed(2) + 'G');
-  drive.props.forEach(p => {
-    const z = ((p.base + x) % p.L + p.L) % p.L - (p.L - 20);
-    p.o.position.z = z; p.o.position.y = p.y0 + hAt(z);
-    if (p.flat) p.o.rotation.x = -Math.PI / 2 + Math.atan(ROAD.gradeAt(x - z));
-  });
+  updateCourseHud(P);
   if (drive.surf !== sim.surface) {                                            // 노면에 따라 땅과 도로 색을 바꾼다
     drive.surf = sim.surface;
-    const S = { dry: [0x1f2b24, 0x2e3033, 0.9, 0.0], wet: [0x1a2420, 0x24272b, 0.25, 0.35], snow: [0xcfd6da, 0x5f666b, 0.85, 0.0] }[sim.surface];
+    const S = { dry: [0x4f6b3e, 0x3a3d42, 0.92, 0.0, 0xffffff], wet: [0x3f5733, 0x26292d, 0.25, 0.35, 0xb9c4b4], snow: [0xdfe6ea, 0x6a7176, 0.85, 0.0, 0xf4f7f9] }[sim.surface];
     drive.groundMat.color.setHex(S[0]); drive.roadMat.color.setHex(S[1]); drive.roadMat.roughness = S[2]; drive.roadMat.metalness = S[3];
+    Object.values(drive.courseScenes).forEach(g => { const u = g.userData; u.roadM.color.setHex(S[1]); u.roadM.roughness = S[2]; u.roadM.metalness = S[3];
+      u.terrainMat.color.setHex(S[4]); u.terrainMat.emissive.setHex(sim.surface === 'snow' ? 0x9aa4ab : 0x000000); });
   }
-  drive.tail.emissive.setHex(sim.brake ? 0xff2020 : 0x550000);
+  drive.tail.emissive.setHex(sim.brake ? 0xff2020 : 0x660000);
   drive.rev.emissive.setHex(sim.cur === 'R' ? 0xffffff : 0x000000);
   const d = drive.dist;
   setText('dDist', d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(2) + ' km');
@@ -1418,6 +1626,14 @@ const steerEl = $('steer');
 steerEl.addEventListener('input', () => { STEER.target = steerEl.value / 100; });
 $('steerC').addEventListener('click', () => { STEER.target = 0; steerEl.value = 0; });
 function updateSteer(dt) {
+  if (COURSE.c) {                                         // 코스에서는 도로 곡률에 맞춰 핸들을 자동으로: tan δ = L·κ
+    const k = sim.curv, d = Math.atan(2.84 * k);
+    STEER.v = clamp(d / 0.6, -1, 1); STEER.target = STEER.v; STEER.R = Math.abs(k) < 1e-4 ? Infinity : 1 / Math.abs(k); STEER.k = 0.8 * k;
+    steerEl.value = Math.round(STEER.v * 100); steerEl.disabled = true;
+    setText('steerLabel', '자동(코스) · ' + (!isFinite(STEER.R) ? '직진' : (d > 0 ? '오른쪽 ' : '왼쪽 ') + Math.round(Math.abs(d) * 180 / Math.PI) + '° · 반경 ' + STEER.R.toFixed(0) + ' m'));
+    return;
+  }
+  steerEl.disabled = false;
   if (STEER.key) STEER.target = clamp(STEER.target + STEER.key * dt * 1.4, -1, 1);
   else if (STEER.keyUsed) STEER.target = Math.abs(STEER.target) < dt * 1.4 ? 0 : STEER.target - Math.sign(STEER.target) * dt * 1.4;   // 키를 놓으면 저절로 가운데로
   if (STEER.key || STEER.keyUsed) steerEl.value = Math.round(STEER.target * 100);
@@ -1432,10 +1648,108 @@ function updateSteer(dt) {
 // ---- 도로 경사 ----
 const gradeText = g => g === 0 ? '0% 평지' : (g > 0 ? '+' + g + '% 오르막' : g + '% 내리막');
 $('grade').addEventListener('input', e => {
+  if (COURSE.c) return;
   const g = +e.target.value; ROAD.set(g / 100, sim.x + (sim.v < 0 ? -15 : 15));   // 15m 앞부터 12m에 걸쳐 바뀐다
   $('gradeLabel').textContent = gradeText(g);
 });
-function setRoadNow(pct) { ROAD.reset(pct / 100, sim.x); $('grade').value = pct; $('gradeLabel').textContent = gradeText(pct); }
+function setRoadNow(pct) { if (COURSE.id !== 'straight') selectCourse('straight'); ROAD.reset(pct / 100, sim.x); $('grade').value = pct; $('gradeLabel').textContent = gradeText(pct); }
+
+// ---- 도로 고르기: 직선(무한 직선 + 경사 슬라이더) 또는 코스(굽은 국도·산길·서킷, 닫힌 고리) ----
+const COURSE = { id: 'straight', c: null, cache: {}, lap: 0, lapT0: null, last: null, best: {}, mapCv: null, mapDrawT: 0 };
+try { COURSE.best = JSON.parse(localStorage.getItem('sonata6at.laps') || '{}') || {}; } catch (e) {}
+const fmtLap = t => t == null ? '–' : Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart(4, '0');
+function selectCourse(id) {
+  if (COURSE.id === id && (id === 'straight' || COURSE.c)) return;
+  COURSE.id = id; COURSE.lap = 0; COURSE.lapT0 = null; COURSE.last = null; COURSE.mapCv = null;
+  setThrottle(0); sim.v = 0; sim.lock = false; sim.slide = 0;
+  if (id === 'straight') {
+    COURSE.c = null; ROAD.reset(0, sim.x); $('grade').disabled = false; $('grade').value = 0; $('gradeLabel').textContent = gradeText(0);
+    setText('courseInfo', '끝없는 직선 도로입니다. 아래 "앞 도로 경사"로 오르막·내리막을 만들 수 있습니다.');
+  } else {
+    const c = COURSE.cache[id] || (COURSE.cache[id] = makeCourse(id));
+    COURSE.c = c; ROAD.course = c; sim.x = 0; $('grade').disabled = true;
+    setText('courseInfo', `${c.def.name}: ${c.def.note}. 한 바퀴 ${(c.L / 1000).toFixed(2)}km, 고도차 ${(Math.max(...c.y) - Math.min(...c.y)).toFixed(0)}m. 핸들은 자동이고, 코스 앞 코너와 권장 속도를 화면 아래에 알려 줍니다.`);
+    say(c.def.name + ' 코스를 고르셨습니다. D로 놓고 출발하세요.' + (c.def.kind === 'circuit' ? ' 출발선을 지나면 랩 기록을 잽니다.' : ''));
+  }
+  $('courseSeg').querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-checked', b.dataset.k === id));
+  $('courseSeg').style.setProperty('--i', ['straight', 'country', 'mountain', 'circuit'].indexOf(id));
+  $('miniMap').hidden = id === 'straight'; $('courseBar').hidden = id === 'straight';
+  $('miniMap').parentElement.classList.toggle('has-map', id !== 'straight');
+  if (drive.ready) { drive.pose = carPose(); driveCam('back'); }
+}
+buildSegStr($('courseSeg'), [{ v: 'straight', t: '직선 도로' }, { v: 'country', t: '굽은 국도' }, { v: 'mountain', t: '산길' }, { v: 'circuit', t: '서킷' }], 'straight', v => selectCourse(v));
+// 차의 자세: 직선 도로는 원점, 코스는 가운데 선에서 차로만큼 오른쪽(+ 미끄러지면 바깥으로)
+function carPose() {
+  const C = COURSE.c;
+  if (!C) return { x: 0, y: 0, z: 0, psi: 0, grade: ROAD.gradeAt(sim.x) };
+  const p = C.at(sim.x), off = C.def.lane - Math.sign(p.kap) * sim.slide * 3;
+  return { x: p.x + Math.cos(p.psi) * off, y: p.y, z: p.z - Math.sin(p.psi) * off, psi: p.psi, grade: p.grade, kap: p.kap };
+}
+// 카메라: 지난 프레임의 차 기준 상대 위치를 그대로 유지하며 따라간다(코너에서 함께 돈다)
+function followCam(P) {
+  const Q = drive.prevPose, cam = drive.camera.position, Y = new THREE.Vector3(0, 1, 0);
+  if (Q) {
+    const d = cam.clone().sub(new THREE.Vector3(Q.x, Q.y, Q.z)).applyAxisAngle(Y, P.psi - Q.psi);
+    cam.set(P.x + d.x, P.y + d.y, P.z + d.z);
+    const t = drive.controls.target.clone().sub(new THREE.Vector3(Q.x, Q.y, Q.z)).applyAxisAngle(Y, P.psi - Q.psi);
+    drive.controls.target.set(P.x + t.x, P.y + t.y, P.z + t.z);
+  }
+  drive.prevPose = Object.assign({}, P);
+}
+// 랩·코너 안내·지도
+function updateLaps() {
+  const C = COURSE.c; if (!C) return;
+  if (COURSE.lapT0 === null && Math.abs(sim.v) > 0.3) COURSE.lapT0 = sim.t;      // 출발하는 순간부터 잰다
+  const n = Math.floor(sim.x / C.L);
+  if (n > COURSE.lap) {
+    const t = sim.t - COURSE.lapT0; COURSE.last = t; COURSE.lapT0 = sim.t; COURSE.lap = n;
+    const best = COURSE.best[C.id];
+    if (best == null || t < best) { COURSE.best[C.id] = t; try { localStorage.setItem('sonata6at.laps', JSON.stringify(COURSE.best)); } catch (e) {} say(`${C.def.name} 새 최고 랩 ${fmtLap(t)}!`); }
+    else say(`랩 ${fmtLap(t)} (최고 ${fmtLap(best)})`);
+  } else if (n < COURSE.lap) COURSE.lap = n;
+}
+function updateCourseHud(P) {
+  const C = COURSE.c; if (!C) return;
+  const v = Math.abs(sim.v), nc = C.nextCorner(sim.x, 220, sim.mu), cor = $('dCorner');
+  if (nc) {
+    const need = v > nc.v ? (v * v - nc.v * nc.v) / (2 * 5) : 0, late = v > nc.v * 1.08 && nc.d < need + 25;
+    setText('dCorner', `${nc.dir > 0 ? '↱ 오른쪽' : '↰ 왼쪽'} 코너 ${Math.round(nc.d)}m · 권장 ${Math.round(nc.v * 3.6)}km/h${late ? ' · 감속!' : ''}`);
+    cor.classList.toggle('warn', late || sim.slide > 0.05);
+  } else { setText('dCorner', sim.slide > 0.05 ? '바깥으로 밀림! 속도를 줄이세요' : '직선'); cor.classList.toggle('warn', sim.slide > 0.05); }
+  const s = ((sim.x % C.L) + C.L) % C.L, cur = COURSE.lapT0 === null ? 0 : sim.t - COURSE.lapT0;
+  setText('dLap', C.def.kind === 'circuit' ? `랩 ${COURSE.lap + 1} · ${fmtLap(cur)} · 최고 ${fmtLap(COURSE.best[C.id])}` : `${(s / 1000).toFixed(2)} / ${(C.L / 1000).toFixed(2)} km · 경사 ${(P.grade * 100).toFixed(1)}%`);
+  drawMiniMap();
+}
+function drawMiniMap() {
+  const C = COURSE.c, cv = $('miniMap'); if (!C || performance.now() - COURSE.mapDrawT < 100) return;
+  COURSE.mapDrawT = performance.now();
+  const W = 160, ctx2 = cv.getContext('2d');
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < C.N; i += 4) { x0 = Math.min(x0, C.x[i]); x1 = Math.max(x1, C.x[i]); z0 = Math.min(z0, C.z[i]); z1 = Math.max(z1, C.z[i]); }
+  const k = (W - 24) / Math.max(x1 - x0, z1 - z0), ox = (W - (x1 - x0) * k) / 2, oz = (W - (z1 - z0) * k) / 2;
+  const X = x => ox + (x - x0) * k, Z = z => oz + (z - z0) * k;
+  ctx2.clearRect(0, 0, W, W);
+  ctx2.lineWidth = 5; ctx2.strokeStyle = 'rgba(233,233,234,.85)'; ctx2.lineJoin = 'round'; ctx2.beginPath();
+  for (let i = 0; i <= C.N; i += 3) { const j = i % C.N; i ? ctx2.lineTo(X(C.x[j]), Z(C.z[j])) : ctx2.moveTo(X(C.x[j]), Z(C.z[j])); }
+  ctx2.closePath(); ctx2.stroke();
+  ctx2.fillStyle = '#e9e9ea'; ctx2.fillRect(X(C.x[0]) - 6, Z(C.z[0]) - 1.5, 12, 3);             // 출발선
+  const p = C.at(sim.x);
+  ctx2.beginPath(); ctx2.arc(X(p.x), Z(p.z), 6, 0, 7); ctx2.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); ctx2.fill();
+  ctx2.lineWidth = 2; ctx2.strokeStyle = '#101113'; ctx2.stroke();
+}
+// 차 색
+const PAINT = { i: 0 };
+try { const pi = +localStorage.getItem('sonata6at.paint'); if (pi >= 0 && pi < 6) PAINT.i = pi; } catch (e) {}
+function setPaint(i) {
+  PAINT.i = i; if (drive.paint) drive.paint.color.setHex(PAINTS[i][1]);
+  $('paintRow').querySelectorAll('.swatch').forEach((b, k) => b.setAttribute('aria-checked', k === i));
+  try { localStorage.setItem('sonata6at.paint', String(i)); } catch (e) {}
+}
+$('paintRow').innerHTML = PAINTS.map(([n, c], i) => `<button type="button" class="swatch" role="radio" aria-label="${n}" title="${n}" style="background:#${c.toString(16).padStart(6, '0')}" aria-checked="${i === PAINT.i}"></button>`).join('');
+$('paintRow').addEventListener('click', e => { const b = e.target.closest('.swatch'); if (b) setPaint([...$('paintRow').children].indexOf(b)); });
+setText('courseInfo', '끝없는 직선 도로입니다. 아래 "앞 도로 경사"로 오르막·내리막을 만들 수 있습니다.');
+
+
 
 // ---- 주행 모드와 노면 ----
 buildSegStr($('modeSeg'), Object.keys(MODES).map(k => ({ v: k, t: MODES[k].name })), 'normal', v => {
@@ -1454,37 +1768,49 @@ function fuelText() {
   return Math.min(99.9, Math.abs(sim.v) * 0.745 / gps).toFixed(1) + ' km/L';
 }
 
-// ---- 엔진 소리: 4기통 폭발 주파수(rpm/60×2)의 톱니파·사각파 + 배기 잡음을 폭발 주기로 떨게 하고, 변속 순간에는 잠깐 줄인다 ----
-const snd = { ctx: null, on: false };
+// ---- 엔진 소리 ----
+// 4기통은 한 바퀴에 두 번 폭발하므로 기본음 f = rpm/30(공회전 27Hz, 6,000rpm 200Hz). 이 저음은 노트북·휴대폰 스피커가 거의 못 내므로
+// 2·3·4·6배음과 배기 잡음을 넉넉히 섞고, 90Hz 아래는 걸러 들리는 대역에 힘을 싣는다. 출력은 레벨 막대로 보여 준다
+const snd = { ctx: null, on: false, buf: null };
 const VOL = { v: 0.6 };
 try { const sv = parseFloat(localStorage.getItem('sonata6at.vol')); if (sv >= 0 && sv <= 1) { VOL.v = sv; $('vol').value = Math.round(sv * 100); } } catch (e) {}
 $('volLabel').textContent = Math.round(VOL.v * 100) + '%';
 $('vol').addEventListener('input', e => { VOL.v = e.target.value / 100; $('volLabel').textContent = e.target.value + '%'; try { localStorage.setItem('sonata6at.vol', String(VOL.v)); } catch (_) {} });
+function engineGraph(c, dest) {
+  const n = {}, mk = (type, mul, g) => { const o = c.createOscillator(), gg = c.createGain(); o.type = type; gg.gain.value = g; o.connect(gg); o.start(); return { o, mul, g: gg }; };
+  n.osc = [mk('sawtooth', 1, 0.22), mk('sawtooth', 2, 0.30), mk('square', 0.5, 0.10), mk('triangle', 3, 0.26), mk('sawtooth', 4, 0.18), mk('sine', 6, 0.12), mk('sine', 8, 0.08)];
+  const buf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  n.noise = c.createBufferSource(); n.noise.buffer = buf; n.noise.loop = true; n.noise.start();
+  n.bp = c.createBiquadFilter(); n.bp.type = 'bandpass'; n.bp.Q.value = 1.1; n.ng = c.createGain(); n.noise.connect(n.bp).connect(n.ng);
+  n.lp = c.createBiquadFilter(); n.lp.type = 'lowpass'; n.lp.Q.value = 0.7;
+  n.osc.forEach(x => x.g.connect(n.lp)); n.ng.connect(n.lp);
+  const shaper = c.createWaveShaper(), curve = new Float32Array(512); for (let i = 0; i < 512; i++) { const x = i / 256 - 1; curve[i] = Math.tanh(2.2 * x); } shaper.curve = curve;
+  n.am = c.createGain(); n.am.gain.value = 0.7;
+  n.lfo = c.createOscillator(); n.lfo.type = 'sine'; const depth = c.createGain(); depth.gain.value = 0.25; n.lfo.connect(depth).connect(n.am.gain); n.lfo.start();   // 폭발 주기의 떨림
+  n.hp = c.createBiquadFilter(); n.hp.type = 'highpass'; n.hp.frequency.value = 130; n.hp.Q.value = 0.5;
+  n.out = c.createGain(); n.out.gain.value = 0;
+  n.lp.connect(shaper).connect(n.am).connect(n.hp).connect(n.out).connect(dest);
+  return n;
+}
+const engineGain = (rpm, th) => 0.22 + 0.22 * th + 0.08 * Math.min(1, rpm / 6500);
+function engineSet(n, t, rpm, th, gain) {
+  const f = Math.max(20, rpm / 30);
+  n.osc.forEach(x => x.o.frequency.setTargetAtTime(f * x.mul, t, 0.03)); n.lfo.frequency.setTargetAtTime(f / 2, t, 0.03);
+  n.bp.frequency.setTargetAtTime(300 + f * 5, t, 0.05); n.ng.gain.setTargetAtTime(0.06 + 0.22 * th, t, 0.05);
+  n.lp.frequency.setTargetAtTime(1000 + rpm * 0.5 + th * 1600, t, 0.05);
+  n.out.gain.setTargetAtTime(gain, t, 0.04);
+}
 function soundToggle() {
   if (!snd.ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { say('이 브라우저는 소리를 낼 수 없습니다.', true); return; }
-    const c = new AC(), o1 = c.createOscillator(), o2 = c.createOscillator(), g1 = c.createGain(), g2 = c.createGain();
-    const lp = c.createBiquadFilter(), shaper = c.createWaveShaper(), amp = c.createGain(), out = c.createGain();
-    o1.type = 'sawtooth'; o2.type = 'square'; g1.gain.value = 0.5; g2.gain.value = 0.28;
-    // 배기 잡음: 흰 잡음 → 대역 통과
-    const buf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const noise = c.createBufferSource(); noise.buffer = buf; noise.loop = true;
-    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9; const ng = c.createGain(); ng.gain.value = 0.18;
-    // 폭발 주기로 크기를 떨게 하는 저주파(진폭 변조)
-    const lfo = c.createOscillator(), depth = c.createGain(); lfo.type = 'sine'; depth.gain.value = 0.35;
-    const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(1.8 * x); }
-    shaper.curve = curve;
-    lp.type = 'lowpass'; lp.Q.value = 1.1; amp.gain.value = 0.65; out.gain.value = 0;
-    o1.connect(g1).connect(lp); o2.connect(g2).connect(lp); noise.connect(bp).connect(ng).connect(lp);
-    lp.connect(shaper).connect(amp).connect(out).connect(c.destination);
-    lfo.connect(depth).connect(amp.gain);
-    o1.start(); o2.start(); noise.start(); lfo.start();
-    Object.assign(snd, { ctx: c, o1, o2, lp, bp, ng, lfo, out });
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}   // iPhone: 무음 스위치가 켜져 있어도 재생
+    const c = new AC(), an = c.createAnalyser(); an.fftSize = 512; an.connect(c.destination);
+    snd.ctx = c; snd.an = an; snd.buf = new Float32Array(an.fftSize); snd.n = engineGraph(c, an);
   }
   snd.on = !snd.on;
-  if (snd.on) snd.ctx.resume();
+  if (snd.on) snd.ctx.resume().catch(() => {});
   $('sound').textContent = snd.on ? '엔진 소리 끄기' : '엔진 소리 켜기';
   $('sound').setAttribute('aria-pressed', snd.on);
 }
@@ -1492,11 +1818,14 @@ $('sound').addEventListener('click', soundToggle);
 document.addEventListener('visibilitychange', () => { if (snd.ctx) (document.hidden ? snd.ctx.suspend() : snd.on && snd.ctx.resume()); });
 function updateSound(rpm) {
   if (!snd.ctx) return;
-  const t = snd.ctx.currentTime, f = rpm / 60 * 2, dip = sim.shift && sim.shift.t < sim.shift.dur * 0.6 ? 0.55 : 1;
-  snd.o1.frequency.setTargetAtTime(f, t, 0.03); snd.o2.frequency.setTargetAtTime(f / 2, t, 0.03); snd.lfo.frequency.setTargetAtTime(f / 2, t, 0.03);
-  snd.bp.frequency.setTargetAtTime(180 + f * 4, t, 0.05); snd.ng.gain.setTargetAtTime(0.08 + 0.25 * sim.th, t, 0.05);
-  snd.lp.frequency.setTargetAtTime(250 + rpm * 0.22 + sim.th * 700, t, 0.05);
-  snd.out.gain.setTargetAtTime(snd.on ? (0.05 + 0.09 * sim.th + 0.03 * Math.min(1, rpm / 6500)) * dip * VOL.v / 0.6 : 0, t, sim.shift ? 0.02 : 0.05);
+  const t = snd.ctx.currentTime, dip = sim.shift && sim.shift.t < sim.shift.dur * 0.6 ? 0.5 : 1;
+  engineSet(snd.n, t, rpm, sim.th, snd.on ? engineGain(rpm, sim.th) * dip * VOL.v / 0.6 : 0);
+  // 레벨 막대와 안내: 실제로 소리가 나가는지 보여 준다
+  snd.an.getFloatTimeDomainData(snd.buf); let e = 0; for (const x of snd.buf) e += x * x;
+  const rms = Math.sqrt(e / snd.buf.length); $('sndMeter').style.width = Math.min(100, rms * 400) + '%';
+  const hint = !snd.on ? '' : snd.ctx.state !== 'running' ? '브라우저가 소리를 막고 있습니다. "엔진 소리" 버튼을 한 번 더 눌러 주세요.' :
+    rms > 0.01 ? '소리가 나가고 있습니다(초록 막대). 들리지 않으면 기기 음량과, 휴대폰은 무음 모드를 확인하세요.' : '';
+  if ($('sndHint').textContent !== hint) { $('sndHint').textContent = hint; $('sndHint').hidden = !hint; }
 }
 
 // ---- 키보드 조작 ----
@@ -2112,6 +2441,7 @@ function frame(now) {
   const n = Math.ceil(dt / 0.008);
   for (let i = 0; i < n; i++) step(dt / n);
   updateSteer(dtR);
+  updateLaps();
   updateShiftTL();
 
   const rpm = sim.we * 30 / Math.PI, kmh = Math.abs(sim.v) * 3.6;

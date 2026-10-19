@@ -42,13 +42,20 @@
 
       <div class="card" id="drive">
         <h2 style="margin:0 0 4px">주행 보기 (3D)</h2>
-        <p class="gt-sub">레버와 페달로 움직이는 차를 3D로 봅니다. 가속하면 차체 앞이 들리고, 브레이크를 밟으면 앞이 숙여집니다. 끌어서 시점을 돌릴 수 있고(휴대폰은 두 손가락), 차를 누르면 지금 작동 중인 변속기 속을 3D로 봅니다.</p>
+        <p class="gt-sub">레버와 페달로 움직이는 차를 3D로 봅니다. 도로를 고르면 굽은 길·언덕·서킷을 달립니다(코스에서는 핸들을 자동으로 돌리고, 속도와 변속은 직접). 끌어서 시점을 돌릴 수 있고(휴대폰은 두 손가락), 차를 누르면 변속기 속을 3D로 봅니다.</p>
+        <div class="course-pick">
+          <div class="seg four" id="courseSeg" role="radiogroup" aria-label="도로 고르기"></div>
+          <p class="gt-sub" id="courseInfo" style="margin:6px 0 0"></p>
+        </div>
         <div class="drive-box">
           <div id="box3D"></div>
           <div class="drive-hud num"><div><span>주행 거리</span><b id="dDist">0 m</b></div><div><span>가속도</span><b id="dAcc">0.00 G</b></div><div><span>바퀴</span><b id="dWheel">0 rpm</b></div><div><span>변속기</span><b id="dGear">N · 해제</b></div><div><span>연비</span><b id="dFuel">–</b></div><div id="dTurnBox" hidden><span>회전</span><b id="dTurn"></b></div><div id="dWarnBox" hidden><b id="dWarn" style="color:#ffb37a"></b></div></div>
+          <canvas id="miniMap" class="mini-map" width="160" height="160" hidden aria-label="코스 지도와 차 위치"></canvas>
+          <div class="course-bar num" id="courseBar" hidden><b id="dCorner"></b><b id="dLap"></b></div>
           <div class="drive-tip" id="driveTip"><div>레버를 D로 놓고 가속 페달을 올려 보세요<small>키보드: <b>D</b> 누른 뒤 <b>↑</b></small></div></div>
         </div>
         <div class="row2"><button class="qb" type="button" data-dcam="back">뒤에서</button><button class="qb" type="button" data-dcam="side">옆에서</button><button class="qb" type="button" data-dcam="top">위에서</button><button class="qb" type="button" id="toTrans">변속기 속 보기</button></div>
+        <div class="paint-row"><span>차 색</span><div id="paintRow" role="radiogroup" aria-label="차 색"></div></div>
         <p class="lab-msg" id="msg3D" aria-live="polite" style="margin-top:8px"></p>
       </div>
 
@@ -166,7 +173,8 @@
           <div class="slider-head"><span>핸들 (차동기어 보기용)</span><b class="num" id="steerLabel">직진</b></div>
           <div class="steer-row"><input type="range" id="steer" min="-100" max="100" step="1" value="0" aria-label="핸들 각도(왼쪽 −, 오른쪽 +)"><button class="qb" type="button" id="steerC">가운데</button></div>
         </div>
-        <button class="btn" id="sound" type="button" aria-pressed="false">엔진 소리 켜기</button>
+        <div class="snd-row"><button class="btn" id="sound" type="button" aria-pressed="false">엔진 소리 켜기</button><span class="snd-meter" aria-hidden="true"><i id="sndMeter"></i></span></div>
+        <p class="keys" id="sndHint" hidden></p>
         <div>
           <div class="slider-head"><span>소리 크기</span><b class="num" id="volLabel">60%</b></div>
           <input type="range" id="vol" min="0" max="100" step="5" value="60" aria-label="엔진 소리 크기">
@@ -313,6 +321,7 @@
 </main>
 
 <script src="js/sim.js"></script>
+<script src="js/course.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

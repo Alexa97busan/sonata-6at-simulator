@@ -113,7 +113,7 @@ test('눈길 출발 모드는 2단으로 출발한다', () => {
 
 test('페이지가 불러오는 파일이 모두 있다', () => {
   const html = fs.readFileSync(path.join(ROOT, 'sonata-6at.html'), 'utf8');
-  for (const f of ['css/style.css', 'js/sim.js', 'js/app.js']) {
+  for (const f of ['css/style.css', 'js/sim.js', 'js/course.js', 'js/app.js']) {
     assert.ok(html.includes(`"${f}"`), `${f} 참조 없음`);
     assert.ok(fs.existsSync(path.join(ROOT, f)), `${f} 파일 없음`);
   }

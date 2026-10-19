@@ -22,14 +22,17 @@ const upRpm = (M, th) => M.up0 + th * M.upK, dnRpm = (M, th) => M.dn0 + th * M.d
 const MU = { dry: 1.2, wet: 0.55, snow: 0.2 };                          // 노면 마찰계수(단순화)
 // 도로 높이: 경사가 바뀌는 지점마다 12m에 걸쳐 부드럽게 이어진다. s는 출발점부터의 거리(m)
 const ROAD = { g0: 0, c0: 0, ch: [], L: 12, target: 0,
-  gradeAt(s) { let g = this.g0; for (const c of this.ch) g += c.d * clamp((s - c.s) / this.L, 0, 1); return g; },
+  course: null,              // 코스(js/course.js의 makeCourse)를 달면 경사·높이·곡률을 코스에서 읽는다
+  gradeAt(s) { if (this.course) return this.course.gradeAt(s); let g = this.g0; for (const c of this.ch) g += c.d * clamp((s - c.s) / this.L, 0, 1); return g; },
+  curvAt(s) { return this.course ? this.course.curvAt(s) : 0; },
   heightAt(s) {
+    if (this.course) return this.course.heightAt(s);
     let h = this.g0 * s + this.c0;
     for (const c of this.ch) { const u = s - c.s; if (u > 0) h += u < this.L ? c.d * u * u / (2 * this.L) : c.d * (u - this.L / 2); }
     return h;
   },
   set(g, s) { if (g === this.target) return; this.ch.push({ s, d: g - this.target }); this.target = g; },
-  reset(g, s) { this.g0 = g; this.c0 = -g * (s || 0); this.ch = []; this.target = g; },
+  reset(g, s) { this.course = null; this.g0 = g; this.c0 = -g * (s || 0); this.ch = []; this.target = g; },
   prune(x) {                                                          // 300m 넘게 지난 변화는 기본 직선에 합친다
     this.ch = this.ch.filter(c => { if (c.s + this.L < x - 300) { this.g0 += c.d; this.c0 -= c.d * (c.s + this.L / 2); return false; } return true; });
   }
@@ -44,6 +47,7 @@ const sim = { v: 0, we: CFG.idle * Math.PI / 30, cur: 'N', lever: 'N', manual: n
   holdT: -1, holding: false, brakePrev: false,   // 언덕 밀림 방지
   thLowT: 0, kdArmed: true, kd: null,            // 킥다운 { from, to, at, n }
   spin: 0, Fdir: 1,                              // 바퀴 헛돎 정도(0~1)
+  curv: 0, slide: 0,                             // 도로 곡률(1/m, 오른쪽 +), 코너에서 바깥으로 밀리는 정도(0~1)
   fuel: { gps: 0, total: 0, dist: 0 },           // 연료(g/s, 누적 g, 누적 m)
   tc: { pump: CFG.idle, turb: 0, sr: 0, mult: 2, lock: false } };
 const say = (m, w) => { sim.msg = m; sim.warn = !!w; return !w; };
@@ -106,6 +110,11 @@ function engineTorque(rpm, sf) {
 function step(dt) {
   sim.t += dt;
   sim.grade = ROAD.gradeAt(sim.x);
+  // 코너: 원심 가속도 v²κ가 접지 한계(μg의 95%)를 넘으면 바깥으로 밀리며 타이어가 끌려 속도를 잃는다
+  sim.curv = ROAD.curvAt(sim.x);
+  const ayC = sim.v * sim.v * Math.abs(sim.curv), latLim = sim.mu * G0 * 0.95, slideT = ayC > latLim ? Math.min(1, (ayC - latLim) / latLim) : 0;
+  if (slideT > 0.03 && sim.slide < 0.03) say('코너가 너무 빨라 바깥으로 밀립니다. 코너 앞에서 브레이크를 밟고 단을 내리세요.', true);
+  sim.slide += (slideT - sim.slide) * Math.min(1, dt * 10);
   if (sim.th < 0.7) { sim.thLowT = sim.t; sim.kdArmed = true; }
   // 언덕 밀림 방지: 경사에서 멈춘 채 브레이크를 떼면 2초 동안 가려는 반대쪽으로 밀리지 않게 붙잡는다
   const want = sim.lever === 'D' ? 1 : sim.lever === 'R' ? -1 : 0;
@@ -174,7 +183,7 @@ function step(dt) {
     const Fmax = Frr + Fb, Fn = F + Fg;
     sim.v = Math.abs(Fn) <= Fmax || (hold && Math.sign(Fn) === -want) ? 0 : v + (Fn - Math.sign(Fn) * Fmax) / Meq * dt;
   } else {
-    const Fres = Frr + 0.5 * RHO * CDA * v * v + Fb;
+    const Fres = Frr + 0.5 * RHO * CDA * v * v + Fb + CFG.mass * Math.max(0, ayC - latLim) * 0.8;   // 마지막 항: 코너에서 미끄러질 때 끌림
     let nv = v + (F + Fg - Math.sign(v) * Fres) / Meq * dt;
     if (nv * v < 0) nv = 0;
     if (hold && nv * want < 0) nv = 0;

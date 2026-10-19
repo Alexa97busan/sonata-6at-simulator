@@ -271,6 +271,23 @@
   .term-pop b { display: block; font-weight: 500; margin-bottom: 2px; }
   .steer-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
   .steer-row .qb { flex: none; padding: 8px 10px; font-size: 13px; margin: 0; }
+  .course-pick { margin: 6px 0 8px; }
+  .course-pick .seg button { font-size: 13px; padding: 9px 2px; }
+  .mini-map { position: absolute; right: 8px; top: 8px; width: 120px; height: 120px; aspect-ratio: auto; border-radius: 10px; background: rgba(16,17,19,.62); pointer-events: none; }
+  .course-bar { position: absolute; left: 8px; bottom: 8px; right: 8px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; pointer-events: none; }
+  .course-bar b { background: rgba(16,17,19,.74); color: #e9e9ea; border-radius: 8px; padding: 5px 10px; font-size: 13px; font-weight: 500; }
+  .course-bar b:empty { display: none; }
+  .course-bar b.warn { background: rgba(201,42,42,.9); color: #fff; }
+  .paint-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+  .paint-row > div { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
+  .swatch[aria-checked="true"] { border-color: var(--ink); box-shadow: 0 0 0 2px var(--panel) inset; }
+  .snd-row { display: grid; grid-template-columns: 1fr 64px; gap: 10px; align-items: center; }
+  .snd-meter { height: 10px; background: var(--bg); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+  .snd-meter i { display: block; height: 100%; width: 0; background: var(--on); transition: width .08s linear; }
+  @media (max-width: 560px) { .mini-map { width: 84px; height: 84px; top: auto; bottom: 44px; } .course-bar b { font-size: 12px; } }
+  .drive-box.has-map .drive-hud { max-width: calc(100% - 144px); }
+  @media (max-width: 560px) { .drive-box.has-map .drive-hud { max-width: none; } }
   .lab-msg { min-height: 1.4em; font-size: 12px; color: var(--ink-2); margin: -4px 0 0; }
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .sel { width: 100%; padding: 11px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 15px; }
