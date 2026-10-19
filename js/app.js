@@ -1590,7 +1590,7 @@ function renderDrive(dt) {
   const fl = 1 + STEER.k, fr = 1 - STEER.k;
   drive.roll = drive.roll || [0, 0, 0, 0];
   [fl, fr, fl, fr].forEach((f, i) => { drive.roll[i] -= (v / CFG.tireR * f + (i < 2 ? sim.spin * 30 * sim.Fdir : 0)) * dt; drive.wheels[i].rotation.x = drive.roll[i]; });
-  drive.pivots.forEach(p => { p.rotation.y = -STEER.v * 0.6; });
+  drive.pivots.forEach(p => { p.rotation.y = -STEER.delta; });          // 실제 바퀴 조향각
   const ay = isFinite(STEER.R) ? v * v / STEER.R * Math.sign(STEER.v) : 0;
   drive.body.rotation.z += (clamp(ay * 0.006, -0.06, 0.06) - drive.body.rotation.z) * Math.min(1, dt * 6);   // 바깥으로 기우는 차체
   const turning = isFinite(STEER.R) && Math.abs(v) > 0.3;
@@ -1615,34 +1615,96 @@ function renderDrive(dt) {
   setText('dGear', gl + ' · ' + els + (sim.shift ? ' (변속 중)' : ''));
   setText('dFuel', fuelText());
   const ayNow = isFinite(STEER.R) ? sim.v * sim.v / STEER.R : 0;
-  const warn = sim.holding ? '언덕 밀림 방지 중' : sim.spin > 0.05 ? '바퀴 헛돎' : ayNow > sim.mu * G0 * 0.85 ? '옆으로 미끄러질 속도' : '';
+  const warn = sim.holding ? '언덕 밀림 방지 중' : LAT.off ? '도로 밖!' : sim.spin > 0.05 ? '바퀴 헛돎' : ayNow > sim.mu * G0 * 0.85 ? '옆으로 미끄러질 속도' : '';
   setText('dWarn', warn); $('dWarnBox').hidden = !warn;
   drive.controls.update(); drive.renderer.render(drive.scene, drive.camera);
 }
 
 // ---- 핸들: 앞바퀴 조향각 최대 34°, 휠베이스 2.84m, 윤거 1.6m. 회전 반경 R = L / tan δ ----
-const STEER = { v: 0, target: 0, key: 0, k: 0, R: Infinity };
+// 핸들 각(화면의 핸들)은 바퀴 조향각 × 13(조향비): 최대 약 ±450°
+const STEER = { v: 0, target: 0, key: 0, k: 0, R: Infinity, mode: 'manual', drag: false, delta: 0 };
 const steerEl = $('steer');
-steerEl.addEventListener('input', () => { STEER.target = steerEl.value / 100; });
+steerEl.addEventListener('input', () => { STEER.target = steerEl.value / 100; STEER.keyUsed = false; if (COURSE.c && STEER.mode === 'auto') setSteerMode('manual'); });
+steerEl.addEventListener('change', () => { STEER.keyUsed = true; });                  // 손을 떼면 핸들이 저절로 가운데로
 $('steerC').addEventListener('click', () => { STEER.target = 0; steerEl.value = 0; });
+function setSteerMode(m) {
+  STEER.mode = m;
+  const t = m === 'auto' ? '핸들: 자동' : '핸들: 직접';
+  ['steerMode', 'fSteerMode'].forEach(id => { $(id).textContent = t; $(id).setAttribute('aria-pressed', m === 'manual'); });
+  if (m === 'manual') say('직접 핸들: 핸들을 끌거나 ←/→ 키로 조향하세요. 길을 벗어나면 느려지고, 가드레일에 부딪히면 크게 감속합니다.');
+  else say('자동 핸들: 차가 길을 따라갑니다. 속도와 변속만 직접 하세요.');
+}
+['steerMode', 'fSteerMode'].forEach(id => $(id).addEventListener('click', () => setSteerMode(STEER.mode === 'auto' ? 'manual' : 'auto')));
+['steerMode', 'fSteerMode'].forEach(id => { $(id).hidden = true; });               // 직선 도로에서는 늘 직접 핸들
+// 차의 옆 움직임(직접 핸들): e = 차로 가운데에서 오른쪽으로 벗어난 거리(m), h = 도로 방향보다 오른쪽으로 틀어진 각(rad)
+const LAT = { e: 0, h: 0, off: false };
+// 속도 감응 조향: 빠를수록 같은 핸들 각에 바퀴가 덜 꺾인다(60km/h에서 약 절반)
+const steerGain = () => 1 / (1 + Math.pow(Math.abs(sim.v) / 15, 2));
+function roadEdges() {
+  const C = COURSE.c;
+  return C ? { lo: -(C.def.width / 2 + C.def.lane), hi: C.def.width / 2 - C.def.lane, wall: C.def.kind === 'mountain' ? 1.0 : C.def.kind === 'circuit' ? 9 : 12 } : { lo: -6, hi: 2, wall: 12 };
+}
+function updateLateral(dt) {
+  const C = COURSE.c, v = sim.v;
+  if (C && STEER.mode === 'auto') {
+    LAT.e *= Math.max(0, 1 - dt * 2); LAT.h *= Math.max(0, 1 - dt * 4); ROAD.curvOverride = null; ROAD.offroad = LAT.off = false; return;
+  }
+  const kCar = Math.tan(STEER.v * 0.6 * steerGain()) / 2.84, kRoad = C ? C.curvAt(sim.x) : 0;
+  LAT.h = clamp(LAT.h + (kCar - kRoad) * v * dt, -1.2, 1.2);
+  LAT.e += v * Math.sin(LAT.h) * dt;
+  ROAD.curvOverride = kCar;
+  const E = roadEdges(), off = LAT.e < E.lo - 0.2 || LAT.e > E.hi + 0.2;
+  if (off && !LAT.off && Math.abs(v) > 1) say('도로를 벗어났습니다. 풀밭에서는 차가 느려집니다.', true);
+  LAT.off = ROAD.offroad = off;
+  if (LAT.e < E.lo - E.wall || LAT.e > E.hi + E.wall) {                   // 가드레일·방호벽: 부딪히면 크게 감속하고 벽을 따라 선다
+    LAT.e = clamp(LAT.e, E.lo - E.wall, E.hi + E.wall);
+    if (Math.abs(v) > 3) say(C && C.def.kind === 'mountain' ? '가드레일에 부딪혔습니다! 핸들을 길 쪽으로 돌리세요.' : '방호벽에 부딪혔습니다! 핸들을 길 쪽으로 돌리세요.', true);
+    if (Math.abs(v) > 1) sim.v *= 0.5;
+    LAT.h *= 0.2;
+  }
+}
+// 화면 핸들: 끌어서 돌린 각도만큼 조향. 놓으면 저절로 가운데로 돌아온다
+(() => {
+  const w = $('wheelW'); let d = null;
+  const ang = (e, c) => Math.atan2(e.clientY - c[1], e.clientX - c[0]);
+  w.addEventListener('pointerdown', e => {
+    const r = w.getBoundingClientRect(), c = [r.left + r.width / 2, r.top + r.height / 2];
+    d = { c, last: ang(e, c), s: STEER.target }; try { w.setPointerCapture(e.pointerId); } catch (_) {}
+    if (COURSE.c && STEER.mode === 'auto') setSteerMode('manual');
+    STEER.drag = true; STEER.keyUsed = false; e.preventDefault();
+  });
+  w.addEventListener('pointermove', e => {
+    if (!d) return;
+    let a = ang(e, d.c), da = a - d.last; da -= Math.round(da / TAU) * TAU; d.last = a;
+    d.s = clamp(d.s + da * 180 / Math.PI / 450, -1, 1); STEER.target = d.s;
+  });
+  const up = () => { if (!d) return; d = null; STEER.drag = false; STEER.keyUsed = true; };
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => w.addEventListener(ev, up));
+})();
+function drawWheel() {
+  const deg = STEER.v * 450, wh = $('wheelW');
+  wh.firstElementChild.style.transform = `rotate(${deg.toFixed(1)}deg)`; wh.setAttribute('aria-valuenow', Math.round(deg));
+  setText('wheelTag', (COURSE.c && STEER.mode === 'auto' ? '자동 · ' : '') + '핸들 ' + Math.round(deg) + '°');
+}
 function updateSteer(dt) {
-  if (COURSE.c) {                                         // 코스에서는 도로 곡률에 맞춰 핸들을 자동으로: tan δ = L·κ
-    const k = sim.curv, d = Math.atan(2.84 * k);
+  if (COURSE.c && STEER.mode === 'auto') {                // 자동 핸들: 도로 곡률에 맞춰 tan δ = L·κ
+    const k = sim.curv, d = Math.atan(2.84 * k); STEER.delta = d;
     STEER.v = clamp(d / 0.6, -1, 1); STEER.target = STEER.v; STEER.R = Math.abs(k) < 1e-4 ? Infinity : 1 / Math.abs(k); STEER.k = 0.8 * k;
     steerEl.value = Math.round(STEER.v * 100); steerEl.disabled = true;
     setText('steerLabel', '자동(코스) · ' + (!isFinite(STEER.R) ? '직진' : (d > 0 ? '오른쪽 ' : '왼쪽 ') + Math.round(Math.abs(d) * 180 / Math.PI) + '° · 반경 ' + STEER.R.toFixed(0) + ' m'));
-    return;
+    drawWheel(); return;
   }
   steerEl.disabled = false;
-  if (STEER.key) STEER.target = clamp(STEER.target + STEER.key * dt * 1.4, -1, 1);
-  else if (STEER.keyUsed) STEER.target = Math.abs(STEER.target) < dt * 1.4 ? 0 : STEER.target - Math.sign(STEER.target) * dt * 1.4;   // 키를 놓으면 저절로 가운데로
-  if (STEER.key || STEER.keyUsed) steerEl.value = Math.round(STEER.target * 100);
+  if (STEER.key) STEER.target = clamp(STEER.target + STEER.key * dt * 0.9, -1, 1);
+  else if (STEER.keyUsed) STEER.target = Math.abs(STEER.target) < dt * 1.6 ? 0 : STEER.target - Math.sign(STEER.target) * dt * 1.6;   // 키를 놓으면 저절로 가운데로
+  if (STEER.key || STEER.keyUsed || STEER.drag) steerEl.value = Math.round(STEER.target * 100);
   if (!STEER.key && STEER.target === 0) STEER.keyUsed = false;
   STEER.v += (STEER.target - STEER.v) * Math.min(1, dt * 8);
-  const d = STEER.v * 0.6;
+  const d = STEER.v * 0.6 * steerGain(); STEER.delta = d;
   STEER.R = Math.abs(d) < 0.003 ? Infinity : 2.84 / Math.tan(Math.abs(d));
   STEER.k = Math.sign(d) * (isFinite(STEER.R) ? 0.8 / STEER.R : 0);                 // 오른쪽(+)으로 돌면 왼쪽 바퀴가 바깥
   setText('steerLabel', !isFinite(STEER.R) ? '직진' : (d > 0 ? '오른쪽 ' : '왼쪽 ') + Math.round(Math.abs(d) * 180 / Math.PI) + '° · 반경 ' + STEER.R.toFixed(1) + ' m');
+  drawWheel();
 }
 
 // ---- 도로 경사 ----
@@ -1661,6 +1723,8 @@ const fmtLap = t => t == null ? '–' : Math.floor(t / 60) + ':' + (t % 60).toFi
 function selectCourse(id) {
   if (COURSE.id === id && (id === 'straight' || COURSE.c)) return;
   COURSE.id = id; COURSE.lap = 0; COURSE.lapT0 = null; COURSE.last = null; COURSE.mapCv = null;
+  LAT.e = 0; LAT.h = 0; STEER.target = 0; ROAD.curvOverride = null; ROAD.offroad = false;
+  STEER.mode = id === 'straight' ? 'manual' : 'auto'; ['steerMode', 'fSteerMode'].forEach(b => { $(b).textContent = STEER.mode === 'auto' ? '핸들: 자동' : '핸들: 직접'; $(b).hidden = id === 'straight'; });
   setThrottle(0); sim.v = 0; sim.lock = false; sim.slide = 0;
   if (id === 'straight') {
     COURSE.c = null; ROAD.reset(0, sim.x); $('grade').disabled = false; $('grade').value = 0; $('gradeLabel').textContent = gradeText(0);
@@ -1681,9 +1745,9 @@ buildSegStr($('courseSeg'), [{ v: 'straight', t: '직선 도로' }, { v: 'countr
 // 차의 자세: 직선 도로는 원점, 코스는 가운데 선에서 차로만큼 오른쪽(+ 미끄러지면 바깥으로)
 function carPose() {
   const C = COURSE.c;
-  if (!C) return { x: 0, y: 0, z: 0, psi: 0, grade: ROAD.gradeAt(sim.x) };
-  const p = C.at(sim.x), off = C.def.lane - Math.sign(p.kap) * sim.slide * 3;
-  return { x: p.x + Math.cos(p.psi) * off, y: p.y, z: p.z - Math.sin(p.psi) * off, psi: p.psi, grade: p.grade, kap: p.kap };
+  if (!C) return { x: LAT.e, y: 0, z: 0, psi: -LAT.h, grade: ROAD.gradeAt(sim.x) };
+  const p = C.at(sim.x), off = C.def.lane + LAT.e - (STEER.mode === 'auto' ? Math.sign(p.kap) * sim.slide * 3 : 0);
+  return { x: p.x + Math.cos(p.psi) * off, y: p.y, z: p.z - Math.sin(p.psi) * off, psi: p.psi - LAT.h, grade: p.grade, kap: p.kap };
 }
 // 카메라: 지난 프레임의 차 기준 상대 위치를 그대로 유지하며 따라간다(코너에서 함께 돈다)
 function followCam(P) {
@@ -1838,7 +1902,7 @@ document.addEventListener('keydown', e => {
   else if (k === 'KeyR' || k === 'KeyN' || k === 'KeyD') requestLever(k.slice(3));
   else if (/^Digit[1-6]$/.test(k)) requestManual(+k.slice(5));
   else if (k === 'Digit0') requestManual(null);
-  else if (k === 'ArrowLeft' || k === 'ArrowRight') { STEER.key = k === 'ArrowLeft' ? -1 : 1; STEER.keyUsed = true; }
+  else if (k === 'ArrowLeft' || k === 'ArrowRight') { if (COURSE.c && STEER.mode === 'auto') setSteerMode('manual'); STEER.key = k === 'ArrowLeft' ? -1 : 1; STEER.keyUsed = true; }
   else if (k === 'KeyS') soundToggle();
   else if (k === 'KeyM') { const ks = Object.keys(MODES); $('modeSeg').querySelector(`[data-k="${ks[(ks.indexOf(sim.mode) + 1) % ks.length]}"]`).click(); }
   else return;
@@ -2387,6 +2451,24 @@ $('logShare').addEventListener('click', async () => {
   if (t > 0) t100Say(`공유받은 기록: 0→100km/h ${t.toFixed(1)}초${md && MODES[md] ? ' (' + MODES[md].name + ' 모드)' : ''}. 이 기록을 깨 보세요!`);
 })();
 
+// ---- 크게 보기: 주행 화면을 전체 화면으로. 전체 화면을 못 하는 기기(아이폰 등)는 화면을 덮는 방식으로 ----
+const BIG = { on: false };
+function setBig(on) {
+  const box = $('box3D').parentElement;
+  BIG.on = on; box.classList.toggle('full', on); document.body.classList.toggle('drive-full', on);
+  const fs = box.requestFullscreen || box.webkitRequestFullscreen;
+  if (on && fs && !document.fullscreenElement) { try { const r = fs.call(box); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+  if (!on && (document.fullscreenElement || document.webkitFullscreenElement)) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} }
+  $('bigBtn').textContent = on ? '작게 보기' : '⤢ 크게 보기';
+  drive.size = 0; if (on) initDrive();
+  if (on) drive.visible = true;
+}
+$('bigBtn').addEventListener('click', () => setBig(!BIG.on));
+$('bigExit').addEventListener('click', () => setBig(false));
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => { if (!(document.fullscreenElement || document.webkitFullscreenElement) && BIG.on) setBig(false); }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && BIG.on) setBig(false); });
+$('fLever').addEventListener('click', e => { const b = e.target.closest('button'); if (b) requestLever(b.dataset.k); });
+
 // ---- 휴대폰 운전 조작 막대 ----
 const pb = { gas: false };
 function holdBtn(el, on, off) {
@@ -2396,6 +2478,8 @@ function holdBtn(el, on, off) {
 }
 holdBtn($('pbGas'), () => { pb.gas = true; setBrake(false); }, () => { pb.gas = false; setThrottle(0); });
 holdBtn($('pbBrake'), () => { setThrottle(0); setBrake(true); }, () => setBrake(false));
+holdBtn($('fGas'), () => { pb.gas = true; setBrake(false); }, () => { pb.gas = false; setThrottle(0); });
+holdBtn($('fBrake'), () => { setThrottle(0); setBrake(true); }, () => setBrake(false));
 $('pbLever').addEventListener('click', e => { const b = e.target.closest('button'); if (b) requestLever(b.dataset.k); });
 $('pbToggle').addEventListener('click', () => {
   const min = $('pedalbar').classList.toggle('min');
@@ -2406,7 +2490,8 @@ function updatePedalbar(dt) {
   if (pb.gas) setThrottle(+thEl.value + dt * 80);                     // 누르고 있으면 약 1.2초에 걸쳐 끝까지 밟힌다
   $('pbGasBar').style.width = thEl.value + '%';
   setText('pbGear', $('gearTxt').textContent); setText('pbKmh', $('kmhTxt').textContent + ' km/h');
-  $('pbLever').querySelectorAll('button').forEach(b => { const on = b.dataset.k === sim.lever; if (b.getAttribute('aria-pressed') !== String(on)) b.setAttribute('aria-pressed', on); });
+  ['pbLever', 'fLever'].forEach(id => $(id).querySelectorAll('button').forEach(b => { const on = b.dataset.k === sim.lever; if (b.getAttribute('aria-pressed') !== String(on)) b.setAttribute('aria-pressed', on); }));
+  if (BIG.on) { $('fGasBar').style.width = thEl.value + '%'; setText('fKmh', $('kmhTxt').textContent); setText('fGear', $('gearTxt').textContent); setText('fRpm', $('rpmTxt').textContent + ' rpm'); }
 }
 
 // ---- 처음 방문 안내(닫으면 이 브라우저에서는 다시 보이지 않음) ----
@@ -2441,6 +2526,7 @@ function frame(now) {
   const n = Math.ceil(dt / 0.008);
   for (let i = 0; i < n; i++) step(dt / n);
   updateSteer(dtR);
+  updateLateral(dt);
   updateLaps();
   updateShiftTL();
 

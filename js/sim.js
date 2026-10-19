@@ -23,6 +23,8 @@ const MU = { dry: 1.2, wet: 0.55, snow: 0.2 };                          // 노�
 // 도로 높이: 경사가 바뀌는 지점마다 12m에 걸쳐 부드럽게 이어진다. s는 출발점부터의 거리(m)
 const ROAD = { g0: 0, c0: 0, ch: [], L: 12, target: 0,
   course: null,              // 코스(js/course.js의 makeCourse)를 달면 경사·높이·곡률을 코스에서 읽는다
+  curvOverride: null,        // 직접 핸들일 때 차가 실제로 도는 곡률(1/m). null이면 도로 곡률
+  offroad: false,            // 도로 밖(풀·흙)이면 구름 저항이 커진다
   gradeAt(s) { if (this.course) return this.course.gradeAt(s); let g = this.g0; for (const c of this.ch) g += c.d * clamp((s - c.s) / this.L, 0, 1); return g; },
   curvAt(s) { return this.course ? this.course.curvAt(s) : 0; },
   heightAt(s) {
@@ -111,7 +113,7 @@ function step(dt) {
   sim.t += dt;
   sim.grade = ROAD.gradeAt(sim.x);
   // 코너: 원심 가속도 v²κ가 접지 한계(μg의 95%)를 넘으면 바깥으로 밀리며 타이어가 끌려 속도를 잃는다
-  sim.curv = ROAD.curvAt(sim.x);
+  sim.curv = ROAD.curvOverride != null ? ROAD.curvOverride : ROAD.curvAt(sim.x);
   const ayC = sim.v * sim.v * Math.abs(sim.curv), latLim = sim.mu * G0 * 0.95, slideT = ayC > latLim ? Math.min(1, (ayC - latLim) / latLim) : 0;
   if (slideT > 0.03 && sim.slide < 0.03) say('코너가 너무 빨라 바깥으로 밀립니다. 코너 앞에서 브레이크를 밟고 단을 내리세요.', true);
   sim.slide += (slideT - sim.slide) * Math.min(1, dt * 10);
@@ -176,7 +178,7 @@ function step(dt) {
   sim.fuel.gps = gps; sim.fuel.total += gps * dt; sim.fuel.dist += Math.abs(sim.v) * dt;
 
   const Fb = sim.brake ? Math.min(7.5, sim.mu * G0 * 0.95) * CFG.mass : 0;   // 미끄러운 길에서는 브레이크도 접지 한계까지만(ABS 가정)
-  const Frr = CRR * CFG.mass * G0;
+  const Frr = (CRR + (ROAD.offroad ? 0.09 : 0)) * CFG.mass * G0;
   const Fg = -CFG.mass * G0 * Math.sin(Math.atan(sim.grade));          // 경사 방향 중력(오르막이면 뒤로)
   const v = sim.v;
   if (Math.abs(v) < 0.01) {

@@ -190,11 +190,8 @@
   @media (min-width: 860px) { .layout > .stack:last-child { position: sticky; top: 56px; max-height: calc(100vh - 72px); overflow-y: auto; border-radius: 14px; } }
   @media (min-width: 1240px) {
     main { max-width: 1320px; } .layout { grid-template-columns: minmax(0, 1fr) 380px; }
-    /* 넓은 화면: 계기판과 주행 3D를 나란히 두어 스크롤 없이 운전한다 */
-    .layout > .stack:first-child { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-    #drive .row2 .qb { font-size: 13px; padding: 10px 4px; }
-    .layout > .stack:first-child > :not(.cluster):not(#drive) { grid-column: 1 / -1; }
-    .layout > .stack:first-child > .cluster .readout b { font-size: 20px; }
+    /* 넓은 화면: 주행 3D를 맨 위에 크게, 계기판은 그 아래 */
+    .layout > .stack:first-child > #drive { order: -1; }
   }
   .tc-box { background: var(--canvas); border-radius: 12px; padding: 6px; }
   .acc-row.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -288,6 +285,43 @@
   @media (max-width: 560px) { .mini-map { width: 84px; height: 84px; top: auto; bottom: 44px; } .course-bar b { font-size: 12px; } }
   .drive-box.has-map .drive-hud { max-width: calc(100% - 144px); }
   @media (max-width: 560px) { .drive-box.has-map .drive-hud { max-width: none; } }
+  /* 핸들(화면 오른쪽 아래). 끌어서 돌리면 직접 조향 */
+  .wheel-w { position: absolute; right: 10px; bottom: 10px; width: 78px; height: 78px; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; z-index: 3; }
+  .wheel-w:active { cursor: grabbing; }
+  .wheel-w svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,.45)); }
+  .wheel-w:focus-visible { outline: 2px solid var(--accent); border-radius: 50%; }
+  .drive-box .course-bar { right: 98px; }
+  .wheel-tag { position: absolute; right: 8px; bottom: 92px; font-size: 11px; color: #e9e9ea; background: rgba(16,17,19,.7); border-radius: 6px; padding: 2px 6px; pointer-events: none; z-index: 3; }
+  /* 크게 보기(전체 화면). 기기가 전체 화면을 못 하면 화면을 덮는 방식으로 */
+  .full-only { display: none !important; }
+  .drive-box.full { position: fixed; inset: 0; z-index: 100; border-radius: 0; margin: 0; }
+  .drive-box.full #box3D { aspect-ratio: auto; height: 100%; }
+  .drive-box.full .full-only { display: flex !important; }
+  body.drive-full { overflow: hidden; }
+  .drive-box.full .wheel-w { width: 150px; height: 150px; right: 18px; bottom: 18px; }
+  .drive-box.full .wheel-tag { right: 18px; bottom: 174px; font-size: 12px; }
+  .drive-box.full .course-bar { bottom: 112px; right: 184px; }
+  .drive-box.full .mini-map { top: 58px; width: 150px; height: 150px; }
+  .big-exit { position: absolute; top: 8px; right: 8px; z-index: 4; border: 0; border-radius: 10px; padding: 8px 12px; background: rgba(16,17,19,.78); color: #fff; font: inherit; font-size: 14px; cursor: pointer; }
+  .full-read { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); align-items: baseline; gap: 10px; background: rgba(16,17,19,.72); color: #e9e9ea; border-radius: 12px; padding: 6px 14px; pointer-events: none; z-index: 3; }
+  .full-read b { font-size: 34px; font-weight: 300; line-height: 1; }
+  .full-read em { font-style: normal; font-size: 22px; color: var(--accent); }
+  .full-read span { font-size: 12px; color: #8b8e94; }
+  .full-ctrl { position: absolute; left: 14px; bottom: 14px; gap: 10px; align-items: stretch; z-index: 3; }
+  .full-ctrl .fl { display: grid; gap: 4px; }
+  .full-ctrl .fl button { width: 46px; border: 1px solid rgba(255,255,255,.25); background: rgba(16,17,19,.7); color: #cfd2d6; border-radius: 8px; font: inherit; font-size: 15px; padding: 4px 0; }
+  .full-ctrl .fl button[aria-pressed="true"] { background: #e9e9ea; color: #101113; }
+  .full-ctrl .fb2 { width: 108px; border: 0; border-radius: 14px; font: inherit; font-size: 17px; font-weight: 500; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; min-height: 88px; }
+  .full-ctrl .fbrake { background: rgba(201,42,42,.85); color: #fff; } .full-ctrl .fgas { background: rgba(47,143,91,.88); color: #fff; position: relative; overflow: hidden; }
+  .full-ctrl .fgas i { position: absolute; left: 0; bottom: 0; height: 6px; width: 0; background: #fff; }
+  .full-ctrl .fb2.down { filter: brightness(.85); transform: scale(.97); }
+  .full-ctrl .fmode { align-self: end; border: 1px solid rgba(255,255,255,.25); background: rgba(16,17,19,.7); color: #e9e9ea; border-radius: 8px; font: inherit; font-size: 13px; padding: 6px 10px; }
+  @media (max-width: 560px) {
+    .wheel-w { width: 60px; height: 60px; } .wheel-tag { bottom: 72px; } .drive-box .course-bar { right: 76px; }
+    .drive-box.full .wheel-w { width: 120px; height: 120px; } .drive-box.full .wheel-tag { bottom: 144px; }
+    .full-ctrl .fb2 { width: 84px; min-height: 76px; } .drive-box.full .course-bar { bottom: 100px; right: 150px; }
+    .full-read b { font-size: 26px; }
+  }
   .lab-msg { min-height: 1.4em; font-size: 12px; color: var(--ink-2); margin: -4px 0 0; }
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .sel { width: 100%; padding: 11px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 15px; }

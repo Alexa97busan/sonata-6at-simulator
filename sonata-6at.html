@@ -51,10 +51,23 @@
           <div id="box3D"></div>
           <div class="drive-hud num"><div><span>주행 거리</span><b id="dDist">0 m</b></div><div><span>가속도</span><b id="dAcc">0.00 G</b></div><div><span>바퀴</span><b id="dWheel">0 rpm</b></div><div><span>변속기</span><b id="dGear">N · 해제</b></div><div><span>연비</span><b id="dFuel">–</b></div><div id="dTurnBox" hidden><span>회전</span><b id="dTurn"></b></div><div id="dWarnBox" hidden><b id="dWarn" style="color:#ffb37a"></b></div></div>
           <canvas id="miniMap" class="mini-map" width="160" height="160" hidden aria-label="코스 지도와 차 위치"></canvas>
+          <div class="wheel-w" id="wheelW" role="slider" tabindex="0" aria-label="핸들. 끌어서 돌리거나 왼쪽·오른쪽 화살표 키" aria-valuemin="-450" aria-valuemax="450" aria-valuenow="0"><svg viewBox="-50 -50 100 100" aria-hidden="true"><circle r="44" fill="none" stroke="#1d1f22" stroke-width="10"/><circle r="44" fill="none" stroke="#3a3d42" stroke-width="3"/>
+<path d="M-40 6 L-12 6 L-8 16 L8 16 L12 6 L40 6" fill="none" stroke="#2a2c30" stroke-width="9" stroke-linejoin="round"/><path d="M0 16 L0 40" stroke="#2a2c30" stroke-width="9"/>
+<circle r="13" fill="#2a2c30"/><circle r="6" fill="#c8ccd2"/><rect x="-3" y="-49" width="6" height="9" rx="2" fill="#e8590c"/></svg></div>
+          <div class="wheel-tag" id="wheelTag">핸들 0°</div>
+          <button class="big-exit full-only" type="button" id="bigExit">✕ 작게 보기</button>
+          <div class="full-read full-only num" aria-hidden="true"><b id="fKmh">0</b><span>km/h</span><em id="fGear">N</em><span id="fRpm">800 rpm</span></div>
+          <div class="full-ctrl full-only" role="group" aria-label="크게 보기 운전 조작">
+            <div class="fl" id="fLever"><button type="button" data-k="R" aria-pressed="false">R</button><button type="button" data-k="N" aria-pressed="true">N</button><button type="button" data-k="D" aria-pressed="false">D</button></div>
+            <button class="fb2 fbrake" type="button" id="fBrake">브레이크</button>
+            <button class="fb2 fgas" type="button" id="fGas">가속<i id="fGasBar"></i></button>
+            <button class="fmode" type="button" id="fSteerMode">핸들: 직접</button>
+          </div>
           <div class="course-bar num" id="courseBar" hidden><b id="dCorner"></b><b id="dLap"></b></div>
           <div class="drive-tip" id="driveTip"><div>레버를 D로 놓고 가속 페달을 올려 보세요<small>키보드: <b>D</b> 누른 뒤 <b>↑</b></small></div></div>
         </div>
         <div class="row2"><button class="qb" type="button" data-dcam="back">뒤에서</button><button class="qb" type="button" data-dcam="side">옆에서</button><button class="qb" type="button" data-dcam="top">위에서</button><button class="qb" type="button" id="toTrans">변속기 속 보기</button></div>
+        <div class="row2" style="margin-top:8px"><button class="qb primary" type="button" id="bigBtn">⤢ 크게 보기</button><button class="qb" type="button" id="steerMode">핸들: 직접</button></div>
         <div class="paint-row"><span>차 색</span><div id="paintRow" role="radiogroup" aria-label="차 색"></div></div>
         <p class="lab-msg" id="msg3D" aria-live="polite" style="margin-top:8px"></p>
       </div>
@@ -170,7 +183,7 @@
           <input type="range" id="grade" min="-10" max="12" step="1" value="0" aria-label="앞 도로 경사(퍼센트)">
         </div>
         <div>
-          <div class="slider-head"><span>핸들 (차동기어 보기용)</span><b class="num" id="steerLabel">직진</b></div>
+          <div class="slider-head"><span>핸들 (화면의 핸들을 끌거나 ←/→)</span><b class="num" id="steerLabel">직진</b></div>
           <div class="steer-row"><input type="range" id="steer" min="-100" max="100" step="1" value="0" aria-label="핸들 각도(왼쪽 −, 오른쪽 +)"><button class="qb" type="button" id="steerC">가운데</button></div>
         </div>
         <div class="snd-row"><button class="btn" id="sound" type="button" aria-pressed="false">엔진 소리 켜기</button><span class="snd-meter" aria-hidden="true"><i id="sndMeter"></i></span></div>

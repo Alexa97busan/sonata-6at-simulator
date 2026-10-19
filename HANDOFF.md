@@ -7,6 +7,8 @@
 - `js/app.js`: 화면 전부(IIFE 하나). 아래 '스크립트 구조' 표의 구간이 이 파일에 있습니다(SIM 구간 제외).
 - `.github/workflows/test.yml`: GitHub에 올릴 때마다(push, PR) `npm test`를 자동으로 돌립니다(Node 20). 결과는 저장소의 Actions 탭.
 - `js/course.js`: 코스 데이터(굽은 국도·산길·서킷, 닫힌 고리). 조절점을 구심 캐트멀-롬으로 잇고 2m 간격으로 위치·방향·곡률(오른쪽 +)·경사를 냅니다. `ROAD.course`에 달면 물리가 경사·곡률을 코스에서 읽고, 원심 가속도가 μg의 95%를 넘으면 `sim.slide`로 바깥으로 밀리며 속도를 잃습니다. 화면은 `buildCourseScene`(지형·차선·가드레일·연석·나무·경고판)과 `carPose/followCam/updateLaps/updateCourseHud/drawMiniMap`.
+- 핸들·크게 보기(js/app.js): 화면 핸들(`#wheelW`, 끌어서 회전, 놓으면 가운데로)과 ←/→ 키. 핸들 각 = 조향 입력 × 450°. 직접 핸들일 때 `updateLateral`이 차의 옆 위치 `LAT.e`(차로 가운데 기준 m)와 방향 오차 `LAT.h`를 적분하고(차 곡률 tan δ/L − 도로 곡률), `ROAD.curvOverride`로 물리에 차의 곡률을, `ROAD.offroad`로 풀밭 저항(구름 저항 +0.09)을 알립니다. 가드레일·방호벽에 닿으면 속도를 절반으로. 속도 감응 조향 `steerGain`(60km/h에서 약 절반). 코스는 기본 '자동 핸들', 핸들을 잡거나 화살표를 누르면 '직접'으로 바뀌고, 직선 도로는 늘 직접입니다.
+  크게 보기(`setBig`): 전체 화면 API, 안 되면(아이폰·스크립트 클릭) 화면을 덮는 `.drive-box.full`. 안에 속도·단수 표시, R/N/D, 브레이크·가속(누르고 있기), 핸들 모드 버튼. 넓은 화면(1240px 이상)에서는 주행 카드가 계기판 위에 가로 전체로 나옵니다.
 - `tests/course.test.js`: 코스 검사 6개(닫힌 고리, 겹침 없음, 산길 고도차, 경사 연동, 과속 코너 미끄러짐, 서킷 한 바퀴).
 - `tests/sim.test.js`: 물리 자동 검사 12개. `npm test`(= `node --test tests/*.test.js`, Node 18 이상). 0→100, 제동 거리, 킥다운, 내리막 엔진 브레이크, 언덕 밀림 방지, 연비, 도로 높이, 눈길 출발, 파일 참조를 확인합니다. 물리를 고친 뒤 꼭 돌리세요.
 - 외부 의존성은 three.js r128과 OrbitControls뿐이며, 처음 3D를 켤 때 CDN에서 동적으로 불러옵니다.
