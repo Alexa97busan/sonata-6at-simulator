@@ -1,0 +1,8 @@
+{
+  "name": "sonata-6at-simulator",
+  "private": true,
+  "description": "쏘나타 2.0 6단 자동변속기 시뮬레이터",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}
