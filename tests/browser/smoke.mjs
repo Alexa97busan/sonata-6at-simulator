@@ -33,7 +33,8 @@ try {
   await page.goto(URL0, { waitUntil: 'load' });
   await page.waitForTimeout(1500);
   if (noGL) console.log('⚠ 이 브라우저에 WebGL이 없어 3D 검사는 건너뜁니다');
-  await page.locator('#drive').scrollIntoViewIfNeeded();
+  // 물리는 화면과 상관없이 돈다. 소프트웨어 WebGL은 느려서 시간이 늘어지므로, 운전 검사는 3D가 안 보이게 맨 아래로 내려서 한다
+  await page.locator('#ratios').scrollIntoViewIfNeeded();
   await page.keyboard.press('d');
   await page.keyboard.down('ArrowUp');
   let kmh = 0; for (let i = 0; i < 38 && kmh <= 5; i++) { await page.waitForTimeout(400); kmh = +(await page.textContent('#kmhTxt')); }   // 처음 몇 초는 느릴 수 있어 넉넉히 기다린다
@@ -42,6 +43,7 @@ try {
   const gear = await page.textContent('#gearTxt');
   /^[DM]\d$/.test(gear) ? ok('기어 표시 ' + gear) : fail('기어 표시가 이상함: ' + gear);
   // 3D: three.js를 불러와 주행 화면 캔버스가 생겼는지
+  await page.locator('#drive').scrollIntoViewIfNeeded();
   if (!noGL) {
     await page.waitForSelector('#box3D canvas', { timeout: 15000 }).then(() => ok('주행 3D 캔버스'), () => fail('주행 3D 캔버스가 없음'));
     const msg3D = await page.textContent('#msg3D');
