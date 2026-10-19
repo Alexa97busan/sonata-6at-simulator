@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>쏘나타 2.0 6단 자동변속기 시뮬레이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #e7e8e9; --panel: #f3f4f4; --ink: #232426; --ink-2: #6b6d70; --line: #cfd1d3;
+    --s2: #3b82c4; --accent: #e8590c; --on: #2f8f5b; --red: #c92a2a; --canvas: #1c1d20; --dial-ink: #e9e9ea; --dial-dim: #7d8086;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151618; --panel: #1e1f22; --ink: #ececec; --ink-2: #93959a; --line: #34363a;
+      --s2: #6aa9e6; --accent: #ff7a33; --on: #43b57b; --red: #ff6b6b; --canvas: #101113;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151618; --panel: #1e1f22; --ink: #ececec; --ink-2: #93959a; --line: #34363a;
+    --s2: #6aa9e6; --accent: #ff7a33; --on: #43b57b; --red: #ff6b6b; --canvas: #101113;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased;
+    font-family: "Noto Sans KR", "Helvetica Neue", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  .num { font-variant-numeric: tabular-nums; }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 20px 56px; }
+  h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0 0 22px; color: var(--ink-2); font-size: 14px; }
+  .layout { display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; } }
+  .card { background: var(--panel); border-radius: 14px; padding: 20px; }
+  .stack { display: grid; gap: 20px; }
+
+  .cluster { background: var(--canvas); border-radius: 14px; padding: 12px 8px 4px; }
+  canvas { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
+  .readout { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 4px 8px 12px; color: #e9e9ea; }
+  .readout div { text-align: center; }
+  .readout b { display: block; font-size: 24px; font-weight: 300; letter-spacing: -0.02em; line-height: 1.2; }
+  .readout span { font-size: 12px; color: #8b8e94; }
+  #gearTxt { color: var(--accent); }
+
+  fieldset { border: 0; margin: 0; padding: 0; }
+  legend { font-size: 13px; color: var(--ink-2); padding: 0; margin-bottom: 8px; }
+  .controls { display: grid; gap: 20px; }
+  .seg { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); background: var(--bg); border-radius: 10px; padding: 3px; }
+  .seg .ind { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 3);
+    background: var(--panel); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.18);
+    transform: translateX(calc(var(--i, 0) * 100%)); transition: transform .26s var(--ease); }
+  .seg button { position: relative; z-index: 1; border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 15px;
+    padding: 11px 4px; cursor: pointer; border-radius: 8px; transition: color .2s var(--ease), transform .12s var(--ease); -webkit-tap-highlight-color: transparent; }
+  .seg button[aria-checked="true"] { color: var(--ink); font-weight: 500; }
+  .seg button:active { transform: scale(.96); }
+  .gears { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .gears button { border: 1px solid var(--line); background: none; color: var(--ink); font: inherit; font-size: 15px; padding: 10px 0; border-radius: 8px; cursor: pointer;
+    transition: background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease), transform .12s var(--ease); -webkit-tap-highlight-color: transparent; }
+  .gears button:active { transform: scale(.95); }
+  .gears button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hint { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+
+  .slider-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
+  .slider-head b { color: var(--ink); font-weight: 500; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: none; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; background: var(--line); border-radius: 2px; }
+  input[type=range]::-moz-range-track { height: 3px; background: var(--line); border-radius: 2px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); margin-top: -10.5px; border: 0; transition: transform .15s var(--ease); }
+  input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); border: 0; }
+  input[type=range]:active::-webkit-slider-thumb { transform: scale(1.15); }
+  .pedals { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+  .btn { border: 1px solid var(--line); background: none; color: var(--ink); font: inherit; font-size: 15px; padding: 14px 10px; border-radius: 10px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none;
+    transition: background .15s var(--ease), color .15s var(--ease), transform .12s var(--ease); -webkit-tap-highlight-color: transparent; }
+  .btn:active { transform: scale(.97); }
+  #brake.down { background: var(--red); border-color: var(--red); color: #fff; }
+  #msg { min-height: 1.5em; font-size: 13px; color: var(--ink-2); }
+  #msg.warn { color: var(--red); }
+
+  .gt-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .gt-head .seg { width: 210px; }
+  .gt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-top: 12px; }
+  .gt-cv { background: var(--canvas); border-radius: 12px; padding: 6px; }
+  .gt-cv canvas { aspect-ratio: 1; }
+  .gt-title { font-size: 14px; font-weight: 500; margin: 0 0 2px; }
+  .gt-sub { font-size: 12px; color: var(--ink-2); margin: 0 0 8px; }
+  .lr { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .lr:first-of-type { border-top: 0; }
+  .lr i { width: 10px; height: 10px; border-radius: 50%; }
+  .lr em { font-style: normal; color: var(--ink-2); font-size: 12px; min-width: 2.6em; text-align: right; }
+  .lr b { font-weight: 400; min-width: 5.2em; text-align: right; }
+  [hidden] { display: none !important; }
+  .seg.two { grid-template-columns: repeat(2, 1fr); }
+  .seg.two .ind { width: calc((100% - 6px) / 2); }
+  .study-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .study-top .seg { width: 260px; max-width: 100%; }
+  .score { font-size: 13px; color: var(--ink-2); margin: 14px 0 0; }
+  .q-text { font-size: 16px; line-height: 1.55; margin: 6px 0 14px; }
+  .q-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .q-opts.g4 { grid-template-columns: repeat(4, 1fr); }
+  .qchip { border: 1px solid var(--line); background: none; color: var(--ink); font: inherit; font-size: 15px; padding: 12px 4px; border-radius: 10px; cursor: pointer; touch-action: manipulation;
+    transition: background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease), transform .12s var(--ease); -webkit-tap-highlight-color: transparent; }
+  .qchip:active { transform: scale(.96); }
+  .qchip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .qchip.right { background: var(--on); border-color: var(--on); color: #fff; }
+  .qchip.wrong { background: var(--red); border-color: var(--red); color: #fff; }
+  .qchip:disabled { cursor: default; }
+  .q-in { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; }
+  .row2 { display: flex; gap: 10px; margin-top: 12px; }
+  .qb { flex: 1; border: 1px solid var(--line); background: none; color: var(--ink); font: inherit; font-size: 15px; padding: 12px 10px; border-radius: 10px; cursor: pointer; touch-action: manipulation;
+    transition: background .15s var(--ease), transform .12s var(--ease), opacity .2s var(--ease); -webkit-tap-highlight-color: transparent; }
+  .qb:active { transform: scale(.97); }
+  .qb.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .qb:disabled { opacity: .35; cursor: default; }
+  .fb { margin-top: 12px; font-size: 14px; padding: 12px 14px; border-radius: 10px; background: var(--bg); border-left: 3px solid var(--line); line-height: 1.6; }
+  .fb.ok { border-left-color: var(--on); } .fb.bad { border-left-color: var(--red); }
+  .fb b { font-weight: 500; }
+  details { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+  details summary { cursor: pointer; }
+  .path { display: grid; gap: 8px; margin-top: 16px; }
+  .lane { display: flex; align-items: center; }
+  .nd { font-size: 12px; line-height: 1.25; text-align: center; padding: 6px 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-2); white-space: nowrap;
+    transition: background .4s var(--ease), color .4s var(--ease), border-color .4s var(--ease); }
+  .nd small { display: block; font-size: 10px; opacity: .85; }
+  .nd.on { background: var(--on); border-color: var(--on); color: #fff; }
+  .nd.hold { background: var(--red); border-color: var(--red); color: #fff; }
+  .cn { flex: 1; min-width: 8px; height: 3px; background: var(--line); transition: background .4s var(--ease); }
+  .cn.on { background: var(--on); } .cn.hold { background: var(--red); }
+  .outrow { font-size: 13px; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 8px; }
+  .outrow b { color: var(--ink); font-weight: 500; }
+  .qcv { max-width: 260px; margin: 14px auto 0; background: var(--canvas); border-radius: 12px; padding: 6px; }
+  .qcv canvas { aspect-ratio: 1; }
+  .lab-grid { display: grid; grid-template-columns: minmax(0, 400px) 1fr; gap: 20px; margin-top: 14px; align-items: start; }
+  @media (max-width: 760px) { .lab-grid { grid-template-columns: 1fr; } }
+.box3d canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; touch-action: none; border-radius: 12px; }
+  .view-seg { margin-bottom: 10px; }
+  .teeth-set { margin-top: 12px; }
+  .teeth-set summary { font-size: 13px; color: var(--ink-2); padding: 6px 0; }
+  .teeth-set .stepgrid { margin-top: 8px; }
+  .hint3 { font-size: 12px; color: var(--ink-2); margin: 8px 0 0; line-height: 1.55; }
+  .lab-ctl { display: grid; gap: 16px; }
+  .stepgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .st > span { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+  .stp { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+  .stp button { width: 40px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 18px; cursor: pointer; touch-action: manipulation;
+    transition: background .15s var(--ease), transform .12s var(--ease); -webkit-tap-highlight-color: transparent; }
+  .stp button:active { background: var(--line); transform: scale(.94); }
+  .stp input { flex: 1; min-width: 0; width: 100%; text-align: center; border: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; padding: 10px 0; }
+  .lab-msg { min-height: 1.4em; font-size: 12px; color: var(--ink-2); margin: -4px 0 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sel { width: 100%; padding: 11px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 15px; }
+  .cnt { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .cnt:first-child { border-top: 0; }
+  .cnt i { width: 10px; height: 10px; border-radius: 50%; }
+  .cnt em { font-style: normal; font-size: 12px; color: var(--ink-2); min-width: 2.6em; text-align: right; }
+  .cnt em.on { color: var(--on); font-weight: 500; }
+  .cnt em.fx { color: var(--red); font-weight: 500; }
+  .cnt b { font-weight: 400; min-width: 5.4em; text-align: right; }
+  .lab-sum { font-size: 14px; line-height: 1.6; background: var(--bg); border-radius: 10px; padding: 12px 14px; margin: 0; }
+  .lab-exp { font-size: 13px; color: var(--ink-2); line-height: 1.65; margin: 0; }
+  .els { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .el { border: 1px solid var(--line); border-radius: 10px; padding: 10px 8px; text-align: center; font-size: 14px; color: var(--ink-2);
+    transition: background .5s var(--ease), color .5s var(--ease), border-color .5s var(--ease); }
+  .el small { display: block; font-size: 11px; opacity: .8; }
+  .el.on { background: var(--on); border-color: var(--on); color: #fff; }
+  .el.half { background: none; border-color: var(--on); color: var(--on); }
+  h2 { font-size: 15px; font-weight: 500; margin: 0 0 4px; }
+  .sub { margin: 0 0 12px; font-size: 13px; color: var(--ink-2); }
+
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+  th { text-align: left; font-weight: 400; color: var(--ink-2); font-size: 13px; padding: 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 0; border-bottom: 1px solid var(--line); }
+  td > button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 11px 8px; cursor: pointer; }
+  tr:last-child td { border-bottom: 0; }
+  tr { transition: background .2s var(--ease); }
+  tr.on { background: var(--bg); }
+  tr.on td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  tr:hover { background: var(--bg); }
+  tr button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .note { margin: 14px 0 0; font-size: 12px; color: var(--ink-2); max-width: 70ch; }
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>쏘나타 2.0 · 6단 자동변속기</h1>
+    <p>140마력(PS) 2.0 가솔린 엔진과 A6 계열 6단 자동변속기를 단순화해 만든 주행 시뮬레이터입니다.</p>
+  </header>
+
+  <div class="layout">
+    <div class="stack">
+      <div class="cluster">
+        <canvas id="cv" width="960" height="480" aria-label="RPM 게이지와 속도계"></canvas>
+        <div class="readout num">
+          <div><b id="gearTxt">N</b><span>단수</span></div>
+          <div><b id="rpmTxt">800</b><span>rpm</span></div>
+          <div><b id="kmhTxt">0</b><span>km/h</span></div>
+          <div><b id="psTxt">0</b><span>PS</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="gt-head">
+          <h2 style="margin:0">유성기어 내부 (가상 모델)</h2>
+          <div class="seg" id="segSlow" role="radiogroup" aria-label="슬로모션 배율"></div>
+          <div class="seg" id="trailGt" role="radiogroup" aria-label="잔상 길이"></div>
+        </div>
+        <p class="sub">실제 회전을 배율만큼 늦춰 보여줍니다. 이 단수의 변속비: <span class="num" id="modelRatio">—</span></p>
+        <div class="gt-grid">
+          <div>
+            <p class="gt-title">앞 유성기어 (입력 감속)</p>
+            <p class="gt-sub">선기어로 입력, 링기어 고정, 캐리어로 출력</p>
+            <div class="seg two view-seg" id="viewF" role="radiogroup" aria-label="앞 유성기어 화면 방식"></div>
+            <div class="gt-cv" id="cv2F"><canvas id="gcF" width="800" height="800" aria-label="앞 유성기어 애니메이션"></canvas></div>
+            <div class="gt-cv" id="cv3F" hidden style="padding:0;overflow:hidden"><div class="box3d" id="box3F"></div></div>
+            <div id="tools3F" hidden>
+              <div class="row2"><button class="qb" type="button" data-ctl="F" data-cam="front">정면</button><button class="qb" type="button" data-ctl="F" data-cam="oblique">비스듬히</button><button class="qb" type="button" data-ctl="F" data-cam="side">옆</button></div>
+              <p class="hint3">드래그로 회전 · 휠이나 두 손가락으로 확대. 링기어는 케이스에 고정되어 있습니다.</p>
+            </div>
+            <p class="lab-msg" id="msg3F" aria-live="polite"></p>
+            <div id="lgF"></div>
+            <details class="teeth-set"><summary>잇수 직접 설정</summary><div id="setF"></div></details>
+          </div>
+          <div>
+            <p class="gt-title">뒤 유성기어 (라비뇨식)</p>
+            <p class="gt-sub">선기어 2개, 긴 피니언·짧은 피니언, 링기어(출력)</p>
+            <div class="seg two view-seg" id="viewR" role="radiogroup" aria-label="뒤 유성기어 화면 방식"></div>
+            <div class="gt-cv" id="cv2R"><canvas id="gcR" width="800" height="800" aria-label="뒤 라비뇨 유성기어 애니메이션"></canvas></div>
+            <div class="gt-cv" id="cv3R" hidden style="padding:0;overflow:hidden"><div class="box3d" id="box3R"></div></div>
+            <div id="tools3R" hidden>
+              <div class="row2"><button class="qb" type="button" data-ctl="R" data-cam="front">정면</button><button class="qb" type="button" data-ctl="R" data-cam="oblique">비스듬히</button><button class="qb" type="button" data-ctl="R" data-cam="side">옆</button></div>
+              <p class="hint3">기어 세트 앞쪽(-z)에 UD 클러치, 뒤쪽(+z)에 OD·L&amp;R·3-5/R·2-6 팩이 있습니다. 바깥 드럼은 입력 속도로, 안쪽 허브는 연결된 요소의 속도로 돕니다. 초록은 클러치 접합, 빨강은 브레이크 고정이고, 접합되면 디스크가 붙으며 두 쪽이 같은 속도가 됩니다.</p>
+            </div>
+            <p class="lab-msg" id="msg3R" aria-live="polite"></p>
+            <div id="lgR"></div>
+            <details class="teeth-set"><summary>잇수 직접 설정</summary><div id="setR"></div></details>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>변속기 작동 요소</h2>
+        <p class="sub" id="elSub">N 레인지: 모든 요소 해제</p>
+        <div class="els" id="els"></div>
+        <div class="path" id="pathLive"></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card controls">
+        <fieldset>
+          <legend>변속 레버</legend>
+          <div class="seg" id="seg" role="radiogroup" aria-label="변속 레버"></div>
+        </fieldset>
+        <fieldset>
+          <legend>수동 변속 (다시 누르면 자동)</legend>
+          <div class="gears" id="gears"></div>
+        </fieldset>
+        <div>
+          <div class="slider-head"><span>가속 페달</span><b class="num" id="thLabel">0%</b></div>
+          <input type="range" id="th" min="0" max="100" step="1" value="0" aria-label="가속 페달">
+        </div>
+        <div class="pedals">
+          <button class="btn" id="release" type="button">가속 놓기</button>
+          <button class="btn" id="brake" type="button">브레이크 (누르고 있기)</button>
+        </div>
+        <div id="msg" aria-live="polite">레버를 D로 놓고 가속 페달을 올려 보세요.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="lab" style="margin-top:20px">
+    <h2>유성기어 실험실</h2>
+    <p class="sub">고정 요소와 입력 요소를 직접 골라 6가지 조합을 모두 돌려 보세요. 잇수도 바꿀 수 있습니다.</p>
+    <div class="lab-grid">
+      <div>
+        <div class="seg two view-seg" id="labView" role="radiogroup" aria-label="화면 방식"></div>
+        <div class="gt-cv" id="labCv2"><canvas id="gcL" width="800" height="800" aria-label="유성기어 실험 애니메이션"></canvas></div>
+        <div class="gt-cv" id="labCv3" hidden style="padding:0;overflow:hidden"><div class="box3d" id="lab3d"></div></div>
+        <div id="lab3dTools" hidden>
+          <div class="row2">
+            <button class="qb" type="button" data-ctl="L" data-cam="front">정면</button>
+            <button class="qb" type="button" data-ctl="L" data-cam="oblique">비스듬히</button>
+            <button class="qb" type="button" data-ctl="L" data-cam="side">옆</button>
+          </div>
+          <p class="sub" style="margin:8px 0 0">드래그로 회전 · 휠이나 두 손가락으로 확대</p>
+        </div>
+        <p class="lab-msg" id="lab3dMsg" aria-live="polite"></p>
+      </div>
+      <div class="lab-ctl">
+        <fieldset><legend>고정 요소</legend><div class="seg" id="labFix" role="radiogroup" aria-label="고정 요소"></div></fieldset>
+        <fieldset><legend>입력 요소</legend><div class="seg" id="labIn" role="radiogroup" aria-label="입력 요소"></div></fieldset>
+        <div class="stepgrid">
+          <div class="st"><span>선기어 잇수</span><div class="stp"><button type="button" data-f="s" data-d="-1" aria-label="선기어 잇수 줄이기">−</button><input id="tS" type="text" inputmode="numeric" class="num" aria-label="선기어 잇수"><button type="button" data-f="s" data-d="1" aria-label="선기어 잇수 늘리기">+</button></div></div>
+          <div class="st"><span>링기어 잇수</span><div class="stp"><button type="button" data-f="r" data-d="-2" aria-label="링기어 잇수 줄이기">−</button><input id="tR" type="text" inputmode="numeric" class="num" aria-label="링기어 잇수"><button type="button" data-f="r" data-d="2" aria-label="링기어 잇수 늘리기">+</button></div></div>
+          <div class="st"><span>피니언 잇수</span><div class="stp"><button type="button" data-f="p" data-d="-1" aria-label="피니언 잇수 줄이기">−</button><input id="tP" type="text" inputmode="numeric" class="num" aria-label="피니언 잇수"><button type="button" data-f="p" data-d="1" aria-label="피니언 잇수 늘리기">+</button></div></div>
+          <div class="st"><span>캐리어 가상 잇수</span><div class="stp"><button type="button" data-f="c" data-d="-2" aria-label="캐리어 잇수 줄이기">−</button><input id="tC" type="text" inputmode="numeric" class="num" aria-label="캐리어 가상 잇수"><button type="button" data-f="c" data-d="2" aria-label="캐리어 잇수 늘리기">+</button></div></div>
+        </div>
+        <p class="lab-msg" id="labMsg" aria-live="polite"></p>
+        <div class="two-col">
+          <label class="sub" style="margin:0">피니언 개수<select class="sel num" id="labN" style="margin-top:6px"></select></label>
+          <fieldset><legend>잔상</legend><div class="seg" id="trailLab" role="radiogroup" aria-label="잔상 길이"></div></fieldset>
+        </div>
+        <div>
+          <div class="slider-head"><span>입력 회전 속도 (음수는 반대 방향)</span><b class="num" id="labSpdTxt">1.0</b></div>
+          <input type="range" id="labSpd" min="-2" max="2" step="0.5" value="1" aria-label="입력 회전 속도">
+        </div>
+        <div>
+          <div id="labRows"></div>
+          <div class="row2"><button class="qb" id="labReset" type="button">카운터 리셋</button></div>
+        </div>
+        <p class="lab-sum num" id="labSum"></p>
+        <p class="lab-exp" id="labExp"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="study" style="margin-top:20px">
+    <div class="study-top">
+      <h2 style="margin:0">공부 모드</h2>
+      <div class="seg two" id="segStudy" role="radiogroup" aria-label="공부 모드 선택"></div>
+    </div>
+
+    <section id="pChart">
+      <p class="score num" id="scoreChart">정답 0 / 0 · 연속 0</p>
+      <p class="q-text" id="qText"></p>
+      <div class="q-opts" id="qOpts"></div>
+      <div class="row2"><button class="qb primary" id="qCheck" type="button" disabled>정답 확인</button><button class="qb" id="qNext" type="button">다음 문제</button></div>
+      <div class="fb" id="qFb" hidden></div>
+      <div class="path" id="qPath"></div>
+    </section>
+
+    <section id="pCalc" hidden>
+      <p class="score num" id="scoreCalc">정답 0 / 0 · 연속 0</p>
+      <p class="q-text" id="cText"></p>
+      <input class="q-in num" id="cIn" type="text" inputmode="decimal" placeholder="답 입력 (숫자)" autocomplete="off" aria-label="변속비 입력">
+      <details><summary>힌트: 잇수 관계</summary><p>링기어 = 선기어 + 피니언 × 2<br>캐리어 가상 잇수 = 선기어 + 링기어<br>링기어 고정 · 선기어 입력 · 캐리어 출력일 때 변속비 = (선기어 + 링기어) ÷ 선기어</p></details>
+      <div class="row2"><button class="qb primary" id="cCheck" type="button">정답 확인</button><button class="qb" id="cNext" type="button">다음 문제</button></div>
+      <div class="fb" id="cFb" hidden></div>
+      <div class="qcv" id="qcvBox" hidden><canvas id="gcQ" width="600" height="600" aria-label="문제 조합의 유성기어 동작"></canvas></div>
+      <p class="score" id="cLegend" hidden></p>
+    </section>
+  </div>
+
+  <div class="card" style="margin-top:20px">
+    <h2>기어비</h2>
+    <p class="sub">행을 누르면 그 단수로 변속합니다.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>단수</th><th>변속비</th><th>종감속 포함</th><th>6,000rpm 속도</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="note">변속비와 종감속(3.510)은 현대 A6GF1 2.0 전륜 사양의 공개 제원입니다. 유성기어의 잇수와 배치는 공개되지 않아 공식 변속비에 가깝게 맞춘 가상 값입니다(앞 80·96T, 뒤 56·32·112T, 변속비 1~2% 차이). 타이어는 215/55R17(반지름 0.334m), 차량 중량은 1,500kg으로 가정했고, 엔진은 요청하신 140PS(6,000rpm)에 맞춰 토크 곡선을 임의로 만들었습니다. 토크 컨버터와 변속 충격, 록업은 단순화한 모델이라 실제 차의 값과는 차이가 있습니다.</p>
+  </div>
+</main>
+
+<script>
+(() => {
+/*SIM_START*/
+const CFG = { ratios: { 1: 4.400, 2: 2.726, 3: 1.834, 4: 1.392, 5: 1.000, 6: 0.774, R: -3.440 },
+  final: 3.510, tireR: 0.334, mass: 1500, ps: 140, nPeak: 6000, redline: 6500, idle: 800 };
+const Je = 0.25, Kc = 30.8, ETA = 0.92, G0 = 9.81, RHO = 1.2, CDA = 0.65, CRR = 0.012;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const T_REF = CFG.ps * 735.5 / (CFG.nPeak * Math.PI / 30);          // 6,000rpm에서 140PS가 되는 토크(N·m)
+const tq = rpm => { const x = rpm / CFG.nPeak; return T_REF * Math.max(0.55 + 1.35 * x - 0.9 * x * x, 0.2); };
+const fr = rpm => 14 + 0.004 * rpm;                                  // 엔진 마찰 토크
+const ratioOf = g => g === 'N' ? 0 : CFG.ratios[g] * CFG.final;
+const rpmAt = (v, g) => Math.abs(v) / CFG.tireR * Math.abs(ratioOf(g)) * 30 / Math.PI;
+const sim = { v: 0, we: CFG.idle * Math.PI / 30, cur: 'N', lever: 'N', manual: null, th: 0, brake: false,
+  lock: false, shift: null, lastShift: -9, t: 0, Teng: 0, msg: '', warn: false };
+const say = (m, w) => { sim.msg = m; sim.warn = !!w; return !w; };
+
+function beginShift(to) {
+  if (sim.cur === to || (sim.shift && sim.shift.to === to)) return;
+  sim.shift = { from: sim.cur, to, t: 0, dur: (sim.cur === 'N' || to === 'N') ? 0.35 : 0.6, done: false };
+}
+function requestLever(l) {
+  const kmh = sim.v * 3.6;
+  if (l === 'R' && kmh > 3) return say('전진 중에는 R로 변속할 수 없습니다. 정차 후 다시 시도하세요.', true);
+  if (l === 'D' && kmh < -3) return say('후진 중에는 D로 변속할 수 없습니다. 정차 후 다시 시도하세요.', true);
+  sim.lever = l; sim.manual = null;
+  if (l === 'N') beginShift('N');
+  else if (l === 'R') beginShift('R');
+  else if (typeof (sim.shift ? sim.shift.to : sim.cur) !== 'number') beginShift(1);
+  return say(l === 'D' ? '자동 변속 중입니다.' : l === 'R' ? '후진 기어가 물렸습니다.' : '중립: 엔진 동력이 바퀴로 전달되지 않습니다.');
+}
+function requestManual(n) {
+  if (n === null) return requestLever('D');
+  if (sim.v * 3.6 < -3) return say('후진 중에는 전진 단수를 선택할 수 없습니다.', true);
+  if (rpmAt(sim.v, n) > 6300) return say('엔진 과회전 방지: 이 속도에서는 ' + n + '단으로 내릴 수 없습니다.', true);
+  sim.lever = 'D'; sim.manual = n; beginShift(n);
+  return say(n + '단 고정: 수동 변속 중입니다.');
+}
+function targetGear() { return sim.shift ? sim.shift.to : sim.cur; }
+
+function tcu() {
+  if (sim.lever !== 'D' || sim.manual !== null || sim.shift || typeof sim.cur !== 'number' || sim.v < 0) return;
+  if (sim.t - sim.lastShift < 0.8) return;
+  const g = sim.cur, R = CFG.ratios, n = rpmAt(sim.v, g), th = sim.th;
+  if (g < 6) {
+    const after = n * R[g + 1] / R[g];
+    if (n > 1700 + th * 3700 && after > 1250) return beginShift(g + 1);
+  }
+  if (g > 1) {
+    const after = n * R[g - 1] / R[g];
+    if (after < 5600 && n < 950 + th * 1300) return beginShift(g - 1);
+  }
+}
+
+function engineTorque(rpm, sf) {
+  const thEff = Math.max(sim.th, clamp(0.13 + (CFG.idle - rpm) * 0.0016, 0, 0.6));
+  let T = thEff * tq(rpm) - (1 - thEff) * fr(rpm);
+  if (T > 0) T *= sf;
+  if (rpm > CFG.redline) T = Math.min(T, -fr(rpm));
+  return T;
+}
+
+function step(dt) {
+  sim.t += dt;
+  let sf = 1;
+  if (sim.shift) {
+    const s = sim.shift; s.t += dt; sf = 0.55;
+    if (!s.done && s.t >= s.dur / 2) { sim.cur = s.to; s.done = true; }
+    if (s.t >= s.dur) { sim.shift = null; sim.lastShift = sim.t; }
+  }
+  tcu();
+  const g = sim.cur, Rt = ratioOf(g), r = CFG.tireR;
+  const wt = Rt ? sim.v / r * Rt : 0;
+  const rpmT = wt * 30 / Math.PI;
+  let rpmE = sim.we * 30 / Math.PI;
+  let F = 0, Meq = CFG.mass + 120, Teng;
+
+  if (g === 'N') {
+    sim.lock = false;
+    Teng = engineTorque(rpmE, sf);
+    sim.we += Teng / Je * dt;
+  } else {
+    const SR = sim.we > 1 ? wt / sim.we : 0;
+    let want = false;
+    if (!sim.shift && rpmT > 1050 && sim.th <= 0.9) {
+      want = sim.lock || (typeof g === 'number' && g >= 3 && rpmT > 1200 && SR > 0.92) || SR >= 1;
+    }
+    sim.lock = want;
+    if (sim.lock) {
+      sim.we = Math.max(wt, 1); rpmE = sim.we * 30 / Math.PI;
+      Teng = engineTorque(rpmE, sf);
+      F = Teng * Rt * ETA / r;
+      Meq += Je * Rt * Rt / (r * r);
+    } else {
+      Teng = engineTorque(rpmE, sf);
+      const sr = clamp(SR, 0, 1.2);
+      const Tp = Kc * Math.pow(rpmE / 1000, 2) * (1 - 0.9 * Math.pow(sr, 3));
+      const m = sr < 0.85 ? 1 + (1 - sr / 0.85) : 1;
+      sim.we += (Teng - Tp) / Je * dt;
+      F = m * Tp * Rt * ETA / r;
+    }
+  }
+  sim.we = Math.max(sim.we, 300 * Math.PI / 30);
+  sim.Teng = Teng;
+
+  const Fb = sim.brake ? 7.5 * CFG.mass : 0;
+  const Frr = CRR * CFG.mass * G0;
+  const v = sim.v;
+  if (Math.abs(v) < 0.01) {
+    const Fmax = Frr + Fb;
+    sim.v = Math.abs(F) <= Fmax ? 0 : v + (F - Math.sign(F) * Fmax) / Meq * dt;
+  } else {
+    const Fres = Frr + 0.5 * RHO * CDA * v * v + Fb;
+    let nv = v + (F - Math.sign(v) * Fres) / Meq * dt;
+    if (nv * v < 0) nv = 0;
+    sim.v = nv;
+  }
+}
+/*SIM_END*/
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const LEVERS = ['R', 'N', 'D'];
+const NAMES = { R: 'R 후진', N: 'N 중립', D: 'D 주행' };
+
+$('seg').innerHTML = '<span class="ind"></span>' + LEVERS.map(k =>
+  `<button type="button" role="radio" data-k="${k}" aria-checked="false">${NAMES[k]}</button>`).join('');
+$('gears').innerHTML = [1, 2, 3, 4, 5, 6].map(n => `<button type="button" data-n="${n}" aria-pressed="false">${n}</button>`).join('');
+$('seg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) requestLever(b.dataset.k); });
+$('seg').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+  const i = LEVERS.indexOf(sim.lever) + (e.key === 'ArrowRight' ? 1 : -1);
+  requestLever(LEVERS[(i + 3) % 3]); $('seg').querySelector('[aria-checked="true"]').focus();
+});
+$('gears').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const n = +b.dataset.n; requestManual(sim.manual === n ? null : n);
+});
+
+const thEl = $('th');
+thEl.addEventListener('input', () => { sim.th = thEl.value / 100; $('thLabel').textContent = thEl.value + '%'; });
+$('release').addEventListener('click', () => { thEl.value = 0; thEl.dispatchEvent(new Event('input')); });
+const brake = $('brake');
+const setBrake = on => { sim.brake = on; brake.classList.toggle('down', on); };
+brake.addEventListener('pointerdown', e => { brake.setPointerCapture(e.pointerId); setBrake(true); });
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => brake.addEventListener(ev, () => setBrake(false)));
+brake.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setBrake(true); } });
+brake.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') setBrake(false); });
+
+// 작동 요소 표 (A6 계열 작동표)
+const EL = [
+  { id: 'UD', name: 'UD', desc: '클러치' }, { id: 'OD', name: 'OD', desc: '클러치' }, { id: '35R', name: '3-5/R', desc: '클러치' },
+  { id: '26', name: '2-6', desc: '브레이크' }, { id: 'LR', name: 'L&R', desc: '브레이크' }, { id: 'OWC', name: 'OWC', desc: '원웨이' }
+];
+const CHART = { 1: ['UD', 'OWC'], 2: ['UD', '26'], 3: ['UD', '35R'], 4: ['UD', 'OD'], 5: ['OD', '35R'], 6: ['OD', '26'], R: ['35R', 'LR'], N: [] };
+$('els').innerHTML = EL.map(e => `<div class="el" data-e="${e.id}">${e.name}<small>${e.desc}</small></div>`).join('');
+
+$('tbody').innerHTML = [1, 2, 3, 4, 5, 6, 'R'].map(g => {
+  const tot = Math.abs(CFG.ratios[g]) * CFG.final;
+  const kmh = 6000 * Math.PI / 30 / tot * CFG.tireR * 3.6;
+  const label = g === 'R' ? 'R (후진)' : g + '단';
+  return `<tr data-g="${g}"><td><button type="button">${label}</button></td>
+    <td class="num"><button type="button" tabindex="-1">${Math.abs(CFG.ratios[g]).toFixed(3)}</button></td>
+    <td class="num"><button type="button" tabindex="-1">${tot.toFixed(3)}</button></td>
+    <td class="num"><button type="button" tabindex="-1">${kmh.toFixed(0)} km/h</button></td></tr>`;
+}).join('');
+$('tbody').addEventListener('click', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  const g = tr.dataset.g; if (g === 'R') requestLever('R'); else requestManual(+g);
+  window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+});
+
+// 게이지
+const cv = $('cv'), ctx = cv.getContext('2d');
+const disp = { rpm: CFG.idle, kmh: 0 };
+const cssv = () => { const s = getComputedStyle(document.documentElement); return n => s.getPropertyValue(n).trim(); };
+function dial(cx, cy, R, val, max, step, labelEvery, labelFn, redFrom, unit, c) {
+  const a0 = 0.75 * Math.PI, sw = 1.5 * Math.PI, ang = x => a0 + sw * x / max;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 6; ctx.strokeStyle = c.dim; ctx.globalAlpha = .35;
+  ctx.beginPath(); ctx.arc(cx, cy, R, ang(0), ang(redFrom ?? max)); ctx.stroke();
+  if (redFrom != null) { ctx.strokeStyle = c.red; ctx.globalAlpha = .9; ctx.beginPath(); ctx.arc(cx, cy, R, ang(redFrom), ang(max)); ctx.stroke(); }
+  ctx.globalAlpha = 1; ctx.font = '500 15px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= max / step + 1e-6; i++) {
+    const a = ang(i * step), long = i % labelEvery === 0, c1 = Math.cos(a), s1 = Math.sin(a);
+    ctx.lineWidth = long ? 2.2 : 1.2; ctx.strokeStyle = c.ink;
+    ctx.beginPath(); ctx.moveTo(c1 * (R - 12) + cx, s1 * (R - 12) + cy); ctx.lineTo(c1 * (R - (long ? 26 : 20)) + cx, s1 * (R - (long ? 26 : 20)) + cy); ctx.stroke();
+    if (long) { ctx.fillStyle = c.ink; ctx.fillText(labelFn(i * step), c1 * (R - 46) + cx, s1 * (R - 46) + cy); }
+  }
+  ctx.fillStyle = c.dim; ctx.font = '13px "Noto Sans KR", sans-serif'; ctx.fillText(unit, cx, cy + R * 0.42);
+  const a = ang(clamp(val, 0, max));
+  ctx.strokeStyle = c.accent; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.moveTo(cx - Math.cos(a) * 14, cy - Math.sin(a) * 14); ctx.lineTo(cx + Math.cos(a) * (R - 22), cy + Math.sin(a) * (R - 22)); ctx.stroke();
+  ctx.fillStyle = c.accent; ctx.beginPath(); ctx.arc(cx, cy, 7, 0, 7); ctx.fill();
+}
+
+
+// ---------- 가상 유성기어 모델 ----------
+const PG = { Zs: 80, Zr: 96, Zp: 8, nF: 4, Z1: 56, Z2: 32, ZR: 112, Zpl: 40, Zps: 10, nR: 4, custom: false };
+const PG0 = Object.assign({}, PG);
+PG.k = PG.Zs / (PG.Zs + PG.Zr);                         // 앞 유성기어 감속(캐리어/입력)
+const TAU = Math.PI * 2, PI = Math.PI;
+const meshPlanet = (thA, ZA, beta, ZP) => beta + PI - PI / ZP + (ZA / ZP) * (beta - thA);   // 외접 기어의 이가 홈에 맞물리는 피니언 각도
+let rL, rS, dLS, phi, pF0, ringF0, thS0, gam0, thL0, ringR0, sun2_0;
+// 초기 위상: 모든 이가 처음부터 맞물리도록 계산 (잇수를 바꿀 때마다 다시 계산)
+function pgDerive() {
+  PG.k = PG.Zs / (PG.Zs + PG.Zr);
+  rL = (PG.Z2 + PG.Zpl) / 2; rS = (PG.Z1 + PG.Zps) / 2; dLS = (PG.Zps + PG.Zpl) / 2;
+  phi = Math.acos(clamp((rS * rS + rL * rL - dLS * dLS) / (2 * rS * rL), -1, 1));
+  pF0 = meshPlanet(0, PG.Zs, 0, PG.Zp);
+  ringF0 = -TAU * (PG.Zp * (0 - pF0) / TAU + 0.5) / PG.Zr;
+  thS0 = meshPlanet(0, PG.Z1, phi, PG.Zps);
+  gam0 = Math.atan2(0 - rS * Math.sin(phi), rL - rS * Math.cos(phi));
+  thL0 = meshPlanet(thS0, PG.Zps, gam0, PG.Zpl);
+  ringR0 = -TAU * (PG.Zpl * (0 - thL0) / TAU + 0.5) / PG.ZR;
+  sun2_0 = -(TAU / PG.Z2) * (0.5 - PG.Zpl * (PI - thL0) / TAU);
+}
+pgDerive();
+
+// 뒤 유성기어: 요소 연결 조건 2개 + 윌리스 식 2개를 풀어 각 요소의 속도를 구한다.
+function solveRear(g, w, active) {
+  if (g === 'N') return { w1: 0, w2: 0, wc: 0, wr: 0 };
+  const cons = {};
+  active.forEach(id => {
+    if (id === 'UD') cons[0] = PG.k * w; else if (id === '35R') cons[1] = w; else if (id === 'OD') cons[2] = w;
+    else if (id === '26') cons[1] = 0; else if (id === 'LR' || id === 'OWC') cons[2] = 0;
+  });
+  const { Z1, Z2, ZR } = PG;
+  const A = [[0, Z2, -(ZR + Z2), ZR, 0], [-Z1, 0, Z1 - ZR, ZR, 0]];
+  Object.keys(cons).forEach(i => { const row = [0, 0, 0, 0, cons[i]]; row[i] = 1; A.push(row); });
+  if (A.length !== 4) return { w1: 0, w2: 0, wc: 0, wr: 0 };
+  for (let c = 0; c < 4; c++) {
+    let p = c; for (let r = c + 1; r < 4; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]];
+    for (let r = 0; r < 4; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let j = c; j < 5; j++) A[r][j] -= f * A[c][j]; }
+  }
+  return { w1: A[0][4] / A[0][0], w2: A[1][4] / A[1][1], wc: A[2][4] / A[2][2], wr: A[3][4] / A[3][3] };
+}
+const modelRatio = g => { if (g === 'N') return null; const a = CHART[g].slice(); const s = solveRear(g, 1, a); return 1 / s.wr; };
+
+const vis = { win: 0, w1: 0, w2: 0, wc: 0, wr: 0, thS: 0, thC: 0, th1: 0, th2: sun2_0, thCR: 0, thR: ringR0, slow: 0.02 };
+
+function buildSeg2(el, opts, cur, cb) {
+  el.innerHTML = '<span class="ind"></span>' + opts.map(o => `<button type="button" role="radio" data-k="${o.v}" aria-checked="false">${o.t}</button>`).join('');
+  const set = v => { el.style.setProperty('--i', opts.findIndex(o => o.v === v)); el.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', +b.dataset.k === v)); cb(v); };
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (b) set(+b.dataset.k); });
+  set(cur);
+}
+buildSeg2($('segSlow'), [{ v: 0.01, t: '1/100' }, { v: 0.02, t: '1/50' }, { v: 0.05, t: '1/20' }], 0.02, v => { vis.slow = v; });
+
+// 범례
+const LEG = {
+  F: [['선기어 80T', 'var(--accent)'], ['링기어 96T', '#aeb1b7'], ['캐리어', 'var(--on)'], ['피니언 8T×4', '#e9e9ea']],
+  R: [['선기어 1 · 56T', 'var(--accent)'], ['선기어 2 · 32T', 'var(--s2)'], ['캐리어', 'var(--on)'], ['링기어 112T', '#aeb1b7'], ['피니언 40T·24T×4', '#e9e9ea']]
+};
+['F', 'R'].forEach(k => {
+  $('lg' + k).innerHTML = LEG[k].map((r, i) => `<div class="lr"><i style="background:${r[1]}"></i><span id="${k}n${i}">${r[0]}</span><em id="${k}r${i}">—</em><b class="num" id="${k}v${i}">0 rpm</b></div>`).join('');
+});
+
+const gcF = $('gcF'), gcR = $('gcR'), cF = gcF.getContext('2d'), cR = gcR.getContext('2d');
+let FRAME_DT = 0.016;
+const TRAIL = { tau: 0.14 };                       // 잔상 지속 시간(초). 0이면 끔
+function fit(cv, c) {
+  const px = Math.round(cv.clientWidth * (window.devicePixelRatio || 1));
+  let resized = false;
+  if (px > 0 && cv.width !== px) { cv.width = cv.height = px; resized = true; }
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  if (TRAIL.tau > 0 && !resized) {                   // 이전 프레임을 서서히 지워 잔상을 만든다
+    c.globalCompositeOperation = 'destination-out';
+    c.fillStyle = 'rgba(0,0,0,' + (1 - Math.exp(-FRAME_DT / TRAIL.tau)).toFixed(3) + ')';
+    c.fillRect(0, 0, cv.width, cv.height);
+    c.globalCompositeOperation = 'source-over';
+  } else c.clearRect(0, 0, cv.width, cv.height);
+  c.setTransform(cv.width / 400, 0, 0, cv.width / 400, 0, 0);
+}
+function teeth(c, cx, cy, r, Z, ang, len, col, lw) {
+  c.save(); c.translate(cx, cy); c.rotate(ang); c.strokeStyle = col; c.lineWidth = lw; c.beginPath();
+  for (let i = 0; i < Z; i++) { const a = i * TAU / Z, co = Math.cos(a), si = Math.sin(a); c.moveTo(co * (r - len / 2), si * (r - len / 2)); c.lineTo(co * (r + len / 2), si * (r + len / 2)); }
+  c.stroke(); c.restore();
+}
+function marker(c, cx, cy, r, ang, col, size) {
+  c.beginPath(); c.arc(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r, size, 0, 7); c.fillStyle = col; c.fill();
+}
+function body(c, cx, cy, r, col, alpha, fillA, dash) {
+  c.save(); c.globalAlpha = alpha; c.beginPath(); c.arc(cx, cy, r, 0, 7);
+  c.globalAlpha = alpha * fillA; c.fillStyle = col; c.fill(); c.globalAlpha = alpha; c.strokeStyle = col; c.lineWidth = 1.6; if (dash) c.setLineDash([5, 4]); c.stroke(); c.restore();
+}
+
+let lastActive = [];
+function drawGears(dt, tg, active) {
+  lastActive = active;
+  // 목표 속도 (실제 rad/s)
+  const winT = sim.cur === 'N' ? 0.1 * sim.we : sim.v / CFG.tireR * ratioOf(sim.cur);
+  const tgt = solveRear(tg, winT, active);
+  const a = 1 - Math.exp(-dt / 0.15);
+  vis.win += (winT - vis.win) * a;
+  vis.w1 += (tgt.w1 - vis.w1) * a; vis.w2 += (tgt.w2 - vis.w2) * a;
+  vis.wc += (tgt.wc - vis.wc) * a; vis.wr += (tgt.wr - vis.wr) * a;
+  const s = dt * vis.slow;
+  vis.thS += vis.win * s; vis.thC += PG.k * vis.win * s;
+  vis.th1 += vis.w1 * s; vis.th2 += vis.w2 * s; vis.thCR += vis.wc * s; vis.thR += vis.wr * s;
+
+  const cs = getComputedStyle(document.documentElement);
+  const ACC = cs.getPropertyValue('--accent').trim(), ON = cs.getPropertyValue('--on').trim(), S2 = cs.getPropertyValue('--s2').trim();
+  const INK = '#e9e9ea', RING = '#aeb1b7';
+  const held = { F: true };
+  // ---- 앞 유성기어 ----
+  if (ctlF.mode === '3d') renderCtl(ctlF); else { fit(gcF, cF);
+  { const c = cF, m = 172 / (PG.Zr / 2), cx = 200, cy = 200, rr = PG.Zr / 2 * m, rs = PG.Zs / 2 * m, rp = PG.Zp / 2 * m, rc = (PG.Zs + PG.Zp) / 2 * m;
+    body(c, cx, cy, rr + 9, RING, .5, 0, true);
+    body(c, cx, cy, rr, RING, .9, 0.06, false);
+    teeth(c, cx, cy, rr, PG.Zr, ringF0, 3.4, RING, 1.4);
+    marker(c, cx, cy, rr + 4.5, ringF0, RING, 3);
+    body(c, cx, cy, rs, ACC, 1, 0.14, false);
+    teeth(c, cx, cy, rs, PG.Zs, vis.thS, 3.4, ACC, 1.4);
+    marker(c, cx, cy, rs * .8, vis.thS, ACC, 5);
+    for (let i = 0; i < PG.nF; i++) {
+      const al = vis.thC + i * TAU / PG.nF, px = cx + Math.cos(al) * rc, py = cy + Math.sin(al) * rc;
+      c.strokeStyle = ON; c.lineWidth = 2; c.globalAlpha = .9; c.beginPath(); c.moveTo(cx, cy); c.lineTo(px, py); c.stroke(); c.globalAlpha = 1;
+      const tp = meshPlanet(vis.thS, PG.Zs, al, PG.Zp);
+      body(c, px, py, rp, INK, 1, 0.1, false);
+      teeth(c, px, py, rp, PG.Zp, tp, 3.4, INK, 1.4);
+      marker(c, px, py, rp * .5, tp, INK, 2.2);
+      c.beginPath(); c.arc(px, py, 2.6, 0, 7); c.fillStyle = ON; c.fill();
+    }
+    c.beginPath(); c.arc(cx, cy, 9, 0, 7); c.fillStyle = ON; c.fill();
+  } }
+  // ---- 뒤 라비뇨 유성기어 ----
+  const has = id => active.includes(id);
+  const s1Alpha = has('UD') ? 1 : .75, s2Alpha = has('26') ? .55 : 1, ringA = 1;
+  if (ctlR.mode === '3d') renderCtl(ctlR); else { fit(gcR, cR);
+  { const c = cR, m = 176 / (PG.ZR / 2), cx = 200, cy = 200, rr = PG.ZR / 2 * m, r1 = PG.Z1 / 2 * m, r2 = PG.Z2 / 2 * m;
+    const rpl = PG.Zpl / 2 * m, rps = PG.Zps / 2 * m, RL = rL * m, RS = rS * m;
+    body(c, cx, cy, rr + 9, RING, .5, 0, false);
+    body(c, cx, cy, rr, RING, ringA, 0.06, false);
+    teeth(c, cx, cy, rr, PG.ZR, vis.thR, 3, RING, 1.2);
+    marker(c, cx, cy, rr + 4.5, vis.thR, RING, 3.4);
+    // 선기어 1 (짧은 피니언과 맞물림)
+    body(c, cx, cy, r1, ACC, s1Alpha, 0.07, false);
+    teeth(c, cx, cy, r1, PG.Z1, vis.th1, 3, ACC, 1.2);
+    marker(c, cx, cy, r1 * .86, vis.th1, ACC, 4.2);
+    // 선기어 2 (긴 피니언과 맞물림)
+    body(c, cx, cy, r2, S2, s2Alpha, 0.2, has('26'));
+    teeth(c, cx, cy, r2, PG.Z2, vis.th2, 3, S2, 1.2);
+    marker(c, cx, cy, r2 * .62, vis.th2, S2, 4.2);
+    for (let i = 0; i < PG.nR; i++) {
+      const al = vis.thCR + i * TAU / PG.nR;
+      const lx = cx + Math.cos(al) * RL, ly = cy + Math.sin(al) * RL, sx = cx + Math.cos(al + phi) * RS, sy = cy + Math.sin(al + phi) * RS;
+      const ths = meshPlanet(vis.th1, PG.Z1, al + phi, PG.Zps);
+      const thl = meshPlanet(ths, PG.Zps, gam0 + al, PG.Zpl);
+      c.strokeStyle = ON; c.lineWidth = 2; c.globalAlpha = .85; c.beginPath(); c.moveTo(lx, ly); c.lineTo(cx, cy); c.lineTo(sx, sy); c.stroke(); c.globalAlpha = 1;
+      body(c, sx, sy, rps, INK, .95, 0.08, false); teeth(c, sx, sy, rps, PG.Zps, ths, 3, INK, 1.2); marker(c, sx, sy, rps * .55, ths, INK, 2.4);
+      body(c, lx, ly, rpl, INK, .95, 0.12, false); teeth(c, lx, ly, rpl, PG.Zpl, thl, 3, INK, 1.2); marker(c, lx, ly, rpl * .6, thl, INK, 2.8);
+      c.beginPath(); c.arc(sx, sy, 2.4, 0, 7); c.fillStyle = ON; c.fill(); c.beginPath(); c.arc(lx, ly, 2.8, 0, 7); c.fillStyle = ON; c.fill();
+    }
+    c.beginPath(); c.arc(cx, cy, 8, 0, 7); c.fillStyle = ON; c.fill();
+  } }
+  // ---- 범례 값 ----
+  const rp = w => (Math.abs(w * 30 / PI) < 0.5 ? 0 : w * 30 / PI);
+  const fmtR = w => Math.round(rp(w)) + ' rpm';
+  const front = [['입력', vis.win], ['고정', 0], ['출력', PG.k * vis.win], ['자전', PG.Zs / PG.Zp * (vis.win - PG.k * vis.win) * -1 + PG.k * vis.win]];
+  front.forEach((r, i) => { setText('Fr' + i, r[0]); setText('Fv' + i, fmtR(r[1])); });
+  const carRole = has('OD') ? '입력' : (has('LR') || has('OWC')) ? '고정' : '자유';
+  const rear = [[has('UD') ? '입력' : '자유', vis.w1], [has('35R') ? '입력' : has('26') ? '고정' : '자유', vis.w2], [carRole, vis.wc], ['출력', vis.wr],
+    ['자전', PG.Z1 / PG.Zps * (vis.wc - vis.w1) + vis.wc]];
+  rear.forEach((r, i) => { setText('Rr' + i, r[0]); setText('Rv' + i, fmtR(r[1])); });
+  const mr = modelRatio(tg);
+  setText('modelRatio', tg === 'N' ? '중립 (동력 전달 없음)' : PG.custom ? '사용자 잇수 ' + Math.abs(mr).toFixed(3) + ' (공식 ' + Math.abs(CFG.ratios[tg]).toFixed(3) + ')' : '가상 ' + Math.abs(mr).toFixed(3) + ' / 공식 ' + Math.abs(CFG.ratios[tg]).toFixed(3));
+}
+
+// ---------- 동력 경로 ----------
+const VAR_OF = { UD: 0, '35R': 1, '26': 1, OD: 2, LR: 2, OWC: 2 };
+function comboInfo(active) {
+  const vars = new Set(active.map(id => VAR_OF[id]));
+  if (vars.size < 2) return '동력 전달 없음 (작동 요소 부족)';
+  if (vars.size > 2) return '요소 3개 이상 동시 작동: 변속기가 잠기는 인터록 상태';
+  const s = solveRear('X', 1, active);
+  if (Math.abs(s.wr) < 1e-9) return '출력 정지 (고정 요소만 2개)';
+  return '변속비 <b>' + Math.abs(1 / s.wr).toFixed(3) + ' : 1</b> (가상 모델)' + (s.wr < 0 ? ' · 역회전' : '');
+}
+function pathHTML(active) {
+  const has = id => active.includes(id), br = has('LR') || has('OWC');
+  const nd = (t, cls, sub) => `<span class="nd ${cls || ''}">${t}${sub ? `<small>${sub}</small>` : ''}</span>`;
+  const cn = c => `<i class="cn ${c || ''}"></i>`;
+  const on = b => b ? 'on' : '';
+  const l1 = nd('입력축', 'on') + cn('on') + nd('앞 유성', 'on', '×' + PG.k.toFixed(2)) + cn(on(has('UD'))) + nd('UD', on(has('UD'))) + cn(on(has('UD'))) + nd('선기어1', on(has('UD')), has('UD') ? '구동' : '자유');
+  const l2 = nd('입력축', 'on') + cn(on(has('35R'))) + nd('3-5/R', on(has('35R'))) + cn(on(has('35R'))) +
+    nd('선기어2', has('35R') ? 'on' : has('26') ? 'hold' : '', has('35R') ? '구동' : has('26') ? '고정' : '자유') + cn(has('26') ? 'hold' : '') + nd('2-6', has('26') ? 'hold' : '');
+  const l3 = nd('입력축', 'on') + cn(on(has('OD'))) + nd('OD', on(has('OD'))) + cn(on(has('OD'))) +
+    nd('캐리어', has('OD') ? 'on' : br ? 'hold' : '', has('OD') ? '구동' : br ? '고정' : '자유') + cn(br ? 'hold' : '') + nd('L&R·OWC', br ? 'hold' : '');
+  return `<div class="lane">${l1}</div><div class="lane">${l2}</div><div class="lane">${l3}</div>
+    <div class="outrow">선기어1·선기어2·캐리어 → 라비뇨 유성기어 → 링기어(출력) : ${comboInfo(active)}</div>`;
+}
+let lastPathLive = '';
+function updatePathLive(active) { const h = pathHTML(active); if (h !== lastPathLive) { lastPathLive = h; $('pathLive').innerHTML = h; } }
+
+function buildSegStr(el, opts, cur, cb) {
+  el.innerHTML = '<span class="ind"></span>' + opts.map(o => `<button type="button" role="radio" data-k="${o.v}" aria-checked="false">${o.t}</button>`).join('');
+  const set = v => { el.style.setProperty('--i', opts.findIndex(o => o.v === v)); el.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', b.dataset.k === v)); cb(v); };
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (b) set(b.dataset.k); });
+  set(cur);
+}
+
+// ---------- 공부 모드 1: 작동표 퀴즈 ----------
+const ELN = { UD: 'UD', OD: 'OD', '35R': '3-5/R', '26': '2-6', LR: 'L&R', OWC: 'OWC' };
+const GN = g => g === 'R' ? '후진(R)' : g + '단';
+const EXPL = {
+  1: 'UD로 선기어1을 구동(감속 입력)하고 캐리어를 OWC로 고정합니다. 수동 1단(L)에서는 L&R이 함께 작동해 엔진 브레이크가 걸립니다.',
+  2: 'UD로 선기어1을 구동하고 2-6 브레이크로 선기어2를 고정합니다.',
+  3: 'UD(선기어1)와 3-5/R(선기어2)로 두 선기어를 함께 구동합니다.',
+  4: 'UD로 선기어1을 구동하고 OD로 캐리어를 직결 입력합니다.',
+  5: 'OD(캐리어)와 3-5/R(선기어2)이 함께 직결 입력되어 전체가 한 덩어리로 돌아 1:1 직결이 됩니다.',
+  6: 'OD로 캐리어를 직결 입력하고 2-6 브레이크로 선기어2를 고정해 증속합니다.',
+  R: '3-5/R로 선기어2를 구동하고 L&R로 캐리어를 고정하면 링기어가 반대로 돕니다.'
+};
+const validSets = g => g === 1 ? [['UD', 'OWC'], ['UD', 'LR']] : [CHART[g]];
+const qz = { c: 0, n: 0, streak: 0, q: null, sel: [], done: false };
+const same = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+function scoreTxt() { return `정답 ${qz.c} / ${qz.n} · 연속 ${qz.streak}`; }
+
+function newQ() {
+  let q;
+  do { q = { type: Math.random() < 0.6 ? 'els' : 'gear', g: [1, 2, 3, 4, 5, 6, 'R'][Math.floor(Math.random() * 7)] }; }
+  while (qz.q && qz.q.type === q.type && qz.q.g === q.g);
+  qz.q = q; qz.sel = []; qz.done = false;
+  const fb = $('qFb'); fb.hidden = true;
+  if (q.type === 'els') {
+    $('qText').textContent = GN(q.g) + '에서 작동하는 요소 2개를 고르세요.';
+    $('qOpts').className = 'q-opts';
+    $('qOpts').innerHTML = Object.keys(ELN).map(id => `<button class="qchip" type="button" data-e="${id}" aria-pressed="false">${ELN[id]}</button>`).join('');
+    $('qPath').innerHTML = pathHTML([]);
+  } else {
+    const els = q.g === 1 ? ['UD', 'OWC'] : CHART[q.g];
+    $('qText').textContent = els.map(id => ELN[id]).join(' + ') + ' 이(가) 작동 중입니다. 몇 단일까요?';
+    $('qOpts').className = 'q-opts g4';
+    $('qOpts').innerHTML = [1, 2, 3, 4, 5, 6, 'R'].map(g => `<button class="qchip" type="button" data-g="${g}" aria-pressed="false">${g}</button>`).join('');
+    $('qPath').innerHTML = pathHTML(els);
+  }
+  $('qCheck').disabled = true; $('qNext').disabled = false;
+}
+$('qOpts').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || qz.done) return;
+  if (qz.q.type === 'els') {
+    const id = b.dataset.e, i = qz.sel.indexOf(id);
+    if (i >= 0) qz.sel.splice(i, 1); else { qz.sel.push(id); if (qz.sel.length > 2) qz.sel.shift(); }
+    $('qOpts').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', qz.sel.includes(x.dataset.e)));
+    $('qPath').innerHTML = pathHTML(qz.sel);
+    $('qCheck').disabled = qz.sel.length !== 2;
+  } else {
+    qz.sel = [b.dataset.g];
+    $('qOpts').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $('qCheck').disabled = false;
+  }
+});
+$('qCheck').addEventListener('click', () => {
+  if (qz.done) return;
+  const q = qz.q; qz.done = true; qz.n++;
+  let ok, correct;
+  if (q.type === 'els') { ok = validSets(q.g).some(v => same(v, qz.sel)); correct = validSets(q.g)[0]; }
+  else { ok = String(q.g) === qz.sel[0]; correct = q.g === 1 ? ['UD', 'OWC'] : CHART[q.g]; }
+  qz.streak = ok ? qz.streak + 1 : 0; if (ok) qz.c++;
+  $('scoreChart').textContent = scoreTxt();
+  const fb = $('qFb'); fb.hidden = false; fb.className = 'fb ' + (ok ? 'ok' : 'bad');
+  const ans = q.type === 'els' ? correct.map(id => ELN[id]).join(' + ') : GN(q.g);
+  fb.innerHTML = `<b>${ok ? '정답입니다.' : '오답입니다.'}</b> ${ok ? '' : '정답: ' + ans + '. '}${GN(q.g)} · ${EXPL[q.g]} (공식 변속비 ${Math.abs(CFG.ratios[q.g]).toFixed(3)})`;
+  $('qOpts').querySelectorAll('button').forEach(x => {
+    x.disabled = true;
+    const isRight = q.type === 'els' ? correct.includes(x.dataset.e) || (q.g === 1 && ok && qz.sel.includes(x.dataset.e)) : String(q.g) === x.dataset.g;
+    const isSel = q.type === 'els' ? qz.sel.includes(x.dataset.e) : qz.sel[0] === x.dataset.g;
+    x.classList.toggle('right', isRight); x.classList.toggle('wrong', isSel && !isRight);
+  });
+  $('qPath').innerHTML = pathHTML(q.type === 'els' && ok ? qz.sel : correct);
+  $('qCheck').disabled = true;
+});
+$('qNext').addEventListener('click', newQ);
+
+// ---------- 공부 모드 2: 변속비 계산 ----------
+const qc = { c: 0, n: 0, streak: 0, q: null, done: false };
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const TYPES = ['pinion', 'ring', 'sun', 'carrier', 'ratio'];
+function newCalc() {
+  let q;
+  do {
+    const Zs = pick([24, 28, 32, 36, 40, 44, 48]), Zp = pick([8, 10, 12, 14, 16, 18, 20]), Zr = Zs + 2 * Zp;
+    const type = pick(TYPES);
+    q = { type, Zs, Zp, Zr };
+    if (type === 'pinion') { q.text = `선기어 ${Zs}T, 링기어 ${Zr}T일 때 피니언 기어의 잇수는?`; q.ans = Zp; q.exp = `링기어 = 선기어 + 피니언 × 2 이므로<br>피니언 = (링기어 − 선기어) ÷ 2 = (${Zr} − ${Zs}) ÷ 2 = <b>${Zp}T</b>`; }
+    if (type === 'ring') { q.text = `선기어 ${Zs}T, 피니언 ${Zp}T일 때 링기어의 잇수는?`; q.ans = Zr; q.exp = `링기어 = 선기어 + 피니언 × 2 = ${Zs} + ${Zp} × 2 = <b>${Zr}T</b>`; }
+    if (type === 'sun') { q.text = `링기어 ${Zr}T, 피니언 ${Zp}T일 때 선기어의 잇수는?`; q.ans = Zs; q.exp = `선기어 = 링기어 − 피니언 × 2 = ${Zr} − ${Zp} × 2 = <b>${Zs}T</b>`; }
+    if (type === 'carrier') { q.text = `선기어 ${Zs}T, 링기어 ${Zr}T일 때 캐리어의 가상 잇수는?`; q.ans = Zs + Zr; q.exp = `캐리어 가상 잇수 = 선기어 + 링기어 = ${Zs} + ${Zr} = <b>${Zs + Zr}T</b>`; }
+    if (type === 'ratio') { q.text = `선기어 ${Zs}T, 링기어 ${Zr}T입니다. 링기어를 고정하고 선기어로 입력해 캐리어로 출력할 때 변속비(감속비)는? 소수 둘째 자리까지 쓰세요.`; q.ans = (Zs + Zr) / Zs;
+      q.exp = `변속비 = (선기어 + 링기어) ÷ 선기어 = (${Zs} + ${Zr}) ÷ ${Zs} = <b>${q.ans.toFixed(2)} : 1</b> (감속)`; }
+  } while (qc.q && qc.q.type === q.type && qc.q.Zs === q.Zs && qc.q.Zp === q.Zp);
+  qc.q = q; qc.done = false;
+  $('cText').textContent = q.text;
+  $('cIn').value = ''; $('cIn').disabled = false; $('cCheck').disabled = false;
+  $('cFb').hidden = true; $('qcvBox').hidden = true; $('cLegend').hidden = true; qv.on = false;
+}
+function checkCalc() {
+  if (qc.done) return;
+  const q = qc.q, v = parseFloat($('cIn').value.replace(',', '.'));
+  const fb = $('cFb'); fb.hidden = false;
+  if (Number.isNaN(v)) { fb.className = 'fb'; fb.textContent = '숫자로 입력해 주세요.'; return; }
+  qc.done = true; qc.n++;
+  const ok = q.type === 'ratio' ? Math.abs(v - q.ans) <= 0.02 : v === q.ans;
+  qc.streak = ok ? qc.streak + 1 : 0; if (ok) qc.c++;
+  $('scoreCalc').textContent = `정답 ${qc.c} / ${qc.n} · 연속 ${qc.streak}`;
+  fb.className = 'fb ' + (ok ? 'ok' : 'bad');
+  fb.innerHTML = `<b>${ok ? '정답입니다.' : '오답입니다.'}</b><br>${q.exp}`;
+  $('cIn').disabled = true; $('cCheck').disabled = true;
+  startQV(q);
+}
+$('cCheck').addEventListener('click', checkCalc);
+$('cIn').addEventListener('keydown', e => { if (e.key === 'Enter') checkCalc(); });
+$('cNext').addEventListener('click', newCalc);
+
+// 정답 확인용 단일 유성기어 애니메이션
+const gcQ = $('gcQ'), cQ = gcQ.getContext('2d');
+const qv = { on: false, z: null, w: null, thS: 0, thC: 0, thR: 0 };
+function startQV(q) {
+  const w = { sun: 1, ring: 0, carrier: q.Zs / (q.Zs + q.Zr) };
+  const p0 = meshPlanet(0, q.Zs, 0, q.Zp);
+  Object.assign(qv, { on: true, z: { Zs: q.Zs, Zr: q.Zr, fixed: 'ring' }, w, Zp: q.Zp, thS: 0, thC: 0, thR: -TAU * (q.Zp * (0 - p0) / TAU + 0.5) / q.Zr });
+  $('qcvBox').hidden = false; $('cLegend').hidden = false;
+  $('cLegend').textContent = `선기어 ${q.Zs}T · 피니언 ${q.Zp}T · 링기어 ${q.Zr}T (링기어 고정, 선기어 입력)`;
+}
+function drawSimple(cv, c, z, thS, thC, thR) {
+  const Zp = z.Zp, cs = getComputedStyle(document.documentElement);
+  const ACC = cs.getPropertyValue('--accent').trim(), ON = cs.getPropertyValue('--on').trim(), INK = '#e9e9ea', RING = '#aeb1b7';
+  fit(cv, c);
+  const cx = 200, cy = 200, m = 165 / (z.Zr / 2), rr = z.Zr / 2 * m, rs = z.Zs / 2 * m, rp = Zp / 2 * m, rc = (z.Zs + Zp) / 2 * m;
+  body(c, cx, cy, rr + 9, RING, z.fixed === 'ring' ? .35 : .55, 0, z.fixed === 'ring');
+  body(c, cx, cy, rr, RING, z.fixed === 'ring' ? .55 : 1, 0.06, z.fixed === 'ring');
+  teeth(c, cx, cy, rr, z.Zr, thR, 3, RING, 1.3); marker(c, cx, cy, rr + 4.5, thR, RING, 3.2);
+  body(c, cx, cy, rs, ACC, z.fixed === 'sun' ? .55 : 1, 0.14, z.fixed === 'sun');
+  teeth(c, cx, cy, rs, z.Zs, thS, 3, ACC, 1.3); marker(c, cx, cy, rs * .8, thS, ACC, 4.5);
+  const N = z.n || 4;
+  for (let i = 0; i < N; i++) {
+    const al = thC + i * TAU / N, px = cx + Math.cos(al) * rc, py = cy + Math.sin(al) * rc;
+    c.strokeStyle = ON; c.lineWidth = 2; c.globalAlpha = z.fixed === 'carrier' ? .55 : .9; c.beginPath(); c.moveTo(cx, cy); c.lineTo(px, py); c.stroke(); c.globalAlpha = 1;
+    const tp = meshPlanet(thS, z.Zs, al, Zp);
+    body(c, px, py, rp, INK, 1, 0.1, false); teeth(c, px, py, rp, Zp, tp, 3, INK, 1.3); marker(c, px, py, rp * .5, tp, INK, 2.2);
+    c.beginPath(); c.arc(px, py, 2.6, 0, 7); c.fillStyle = ON; c.fill();
+  }
+  c.beginPath(); c.arc(cx, cy, 8, 0, 7); c.fillStyle = ON; c.fill();
+}
+function drawQ(dt) {
+  if (!qv.on) return;
+  const w = qv.w, s = dt * 2.2;
+  qv.thS += w.sun * s; qv.thC += w.carrier * s; qv.thR += w.ring * s;
+  drawSimple(gcQ, cQ, { Zs: qv.z.Zs, Zr: qv.z.Zr, Zp: qv.Zp, fixed: qv.z.fixed }, qv.thS, qv.thC, qv.thR);
+}
+
+// ---------- 유성기어 실험실 ----------
+const LN = { sun: '선기어', carrier: '캐리어', ring: '링기어' }, LK = ['sun', 'carrier', 'ring'];
+const LCOL = { sun: 'var(--accent)', carrier: 'var(--on)', ring: '#aeb1b7' };
+const lab = { view: '2d', want: '2d', fixed: 'ring', input: 'sun', Zs: 36, Zp: 12, n: 4, msg: '', speed: 1, thS: 0, thC: 0, thR: 0, rev: { sun: 0, carrier: 0, ring: 0, pin: 0 }, w: null, wp: 0 };
+const LEXP = {
+  'ring-sun': '선기어가 피니언을 돌리고, 피니언은 고정된 링기어 안쪽을 굴러가며 캐리어를 밀고 갑니다. 캐리어는 선기어와 같은 방향으로 느리게 돕니다. (감속)',
+  'ring-carrier': '캐리어가 피니언을 끌고 고정된 링기어 안을 굴러갑니다. 이때 피니언의 자전이 선기어를 돌려 선기어는 캐리어보다 빠르게 같은 방향으로 돕니다. (증속)',
+  'carrier-sun': '캐리어가 고정되면 피니언은 제자리에서 자전만 합니다. 선기어가 돌면 피니언이 방향을 뒤집고 링기어가 반대로 돕니다. (감속·역회전, 후진에 사용)',
+  'carrier-ring': '캐리어가 고정되어 피니언은 제자리에서 자전만 합니다. 링기어가 돌면 선기어가 반대로 훨씬 빠르게 돕니다. (증속·역회전)',
+  'sun-carrier': '선기어가 고정되어 있어서, 캐리어가 돌면 피니언이 고정된 선기어를 타고 굴러가며 링기어를 앞으로 밀어냅니다. 링기어가 캐리어보다 빠르게 돕니다. (증속, 오버드라이브)',
+  'sun-ring': '선기어가 고정되어 있고 링기어가 피니언을 밀어 돌립니다. 피니언은 선기어를 타고 굴러가며 캐리어를 돌려, 캐리어는 링기어보다 느리게 돕니다. (감속)'
+};
+$('labRows').innerHTML = LK.concat(['pin']).map(k => `<div class="cnt"><i style="background:${k === 'pin' ? '#e9e9ea' : LCOL[k]}"></i><span id="lb_${k}">${k === 'pin' ? '피니언 (자전)' : LN[k]}</span><em id="lr_${k}">—</em><b class="num" id="lv_${k}">0.00 바퀴</b></div>`).join('');
+
+const fmtRev = v => (Math.abs(v) < 0.005 ? '0.00' : (v < 0 ? '−' : '+') + Math.abs(v).toFixed(2)) + ' 바퀴';
+function labZr() { return lab.Zs + 2 * lab.Zp; }
+function labRecalc() {
+  const Zs = lab.Zs, Zr = labZr(), K = { sun: Zs, ring: Zr, carrier: -(Zs + Zr) };
+  const out = LK.find(k => k !== lab.fixed && k !== lab.input);
+  const w = { sun: 0, ring: 0, carrier: 0 }; w[lab.input] = 1; w[out] = -K[lab.input] / K[out];
+  lab.w = w; lab.out = out; lab.wp = w.carrier - (Zs / lab.Zp) * (w.sun - w.carrier);
+  const p0 = meshPlanet(0, Zs, 0, lab.Zp);
+  lab.thS = 0; lab.thC = 0; lab.thR = -TAU * (lab.Zp * (0 - p0) / TAU + 0.5) / Zr;
+  Object.keys(lab.rev).forEach(k => lab.rev[k] = 0);
+  const ratio = 1 / w[out];
+  LK.forEach(k => { const e = $('lr_' + k); const r = k === lab.fixed ? '고정' : k === lab.input ? '입력' : '출력'; e.textContent = r; e.className = r === '고정' ? 'fx' : r === '입력' ? 'on' : ''; });
+  $('labSum').innerHTML = `${LN[lab.input]} 1바퀴 → ${LN[out]} <b>${w[out].toFixed(3)}바퀴</b><br>변속비 = ${ratio.toFixed(3)} : 1 · ${Math.abs(ratio) > 1 ? '감속' : '증속'}${ratio < 0 ? ' · 역회전' : ' · 정회전'}`;
+  $('labExp').textContent = LEXP[lab.fixed + '-' + lab.input];
+}
+buildSegStr($('labFix'), LK.map(k => ({ v: k, t: LN[k] })), 'ring', v => { lab.fixed = v; if (lab.input === v) { lab.input = LK.find(k => k !== v); syncLabIn(); } labRecalc(); });
+buildSegStr($('labIn'), LK.map(k => ({ v: k, t: LN[k] })), 'sun', v => { lab.input = v; if (lab.fixed === v) { lab.fixed = LK.find(k => k !== v); syncLabFix(); } labRecalc(); });
+function syncSeg3(el, v) { el.style.setProperty('--i', LK.indexOf(v)); el.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', b.dataset.k === v)); }
+function syncLabIn() { syncSeg3($('labIn'), lab.input); }
+function syncLabFix() { syncSeg3($('labFix'), lab.fixed); }
+
+// 잇수 설정: 링기어 = 선기어 + 피니언×2, 캐리어 가상 잇수 = 선기어 + 링기어
+const validNs = (Zs, Zp) => [1, 2, 3, 4, 5, 6].filter(N => (2 * (Zs + Zp)) % N === 0 && (N === 1 || Math.sin(PI / N) >= Zp / (Zs + Zp) * 0.999));
+function labApply() {
+  const ns = validNs(lab.Zs, lab.Zp);
+  if (!ns.includes(lab.n)) lab.n = [4, 3, 2, 1].find(n => ns.includes(n));
+  $('labN').innerHTML = ns.map(n => `<option value="${n}"${n === lab.n ? ' selected' : ''}>${n}개</option>`).join('');
+  $('tS').value = lab.Zs; $('tP').value = lab.Zp; $('tR').value = labZr(); $('tC').value = lab.Zs + labZr();
+  $('labMsg').textContent = lab.msg;
+  labRecalc();
+}
+function setTeeth(which, raw) {
+  const val = Math.round(parseFloat(raw)); lab.msg = '';
+  if (!Number.isFinite(val)) return labApply();
+  if (which === 's') lab.Zs = clamp(val, 12, 60);
+  else if (which === 'p') lab.Zp = clamp(val, 6, 40);
+  else {
+    const Zr = which === 'r' ? val : val - lab.Zs;
+    lab.Zp = clamp(Math.round((Zr - lab.Zs) / 2), 6, 40);
+    const fixedZr = lab.Zs + 2 * lab.Zp;
+    if (which === 'r' && fixedZr !== Zr) lab.msg = `링기어 = 선기어 + 피니언 × 2 이므로 ${fixedZr}T로 맞췄습니다.`;
+    if (which === 'c' && lab.Zs + fixedZr !== val) lab.msg = `캐리어 가상 잇수 = 선기어 + 링기어 이므로 ${lab.Zs + fixedZr}T로 맞췄습니다.`;
+  }
+  if (lab.Zs + 2 * lab.Zp > 160) { lab.Zp = Math.floor((160 - lab.Zs) / 2); lab.msg = '링기어는 최대 160T까지 지원합니다. 피니언을 줄여 맞췄습니다.'; }
+  labApply();
+}
+document.querySelectorAll('.stp button').forEach(b => b.addEventListener('click', () => {
+  const f = b.dataset.f, cur = { s: lab.Zs, r: labZr(), p: lab.Zp, c: lab.Zs + labZr() }[f];
+  setTeeth(f, cur + (+b.dataset.d));
+}));
+[['tS', 's'], ['tR', 'r'], ['tP', 'p'], ['tC', 'c']].forEach(([id, f]) => {
+  $(id).addEventListener('change', e => setTeeth(f, e.target.value));
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+});
+$('labN').addEventListener('change', e => { lab.n = +e.target.value; labRecalc(); });
+
+// 잔상 길이 (모든 애니메이션에 적용)
+const TRAIL_OPTS = [{ v: '0', t: '끔' }, { v: '0.14', t: '보통' }, { v: '0.32', t: '길게' }];
+function setTrail(v) {
+  TRAIL.tau = +v;
+  ['trailLab', 'trailGt'].forEach(id => { const el = $(id); el.style.setProperty('--i', TRAIL_OPTS.findIndex(o => o.v === String(v))); el.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', b.dataset.k === String(v))); });
+}
+['trailLab', 'trailGt'].forEach(id => buildSegStr($(id), TRAIL_OPTS, '0.14', setTrail));
+$('labSpd').addEventListener('input', e => { lab.speed = +e.target.value; $('labSpdTxt').textContent = lab.speed.toFixed(1); });
+$('labReset').addEventListener('click', () => Object.keys(lab.rev).forEach(k => lab.rev[k] = 0));
+const gcL = $('gcL'), cL = gcL.getContext('2d');
+/*G3D_START*/
+// 이가 달린 기어 형상. 이의 중심은 각도 k·(2π/Z)에 두어 2D 모델의 맞물림 위상과 같게 만든다.
+function makeGearGeom(T3, Z, r, thick, internal, rimOut) {
+  const p = 2 * Math.PI / Z, pts = [];
+  const tip = internal ? r - 1 : r + 1, root = internal ? r + 1.25 : r - 1.25;
+  const prof = [[-0.30, root], [-0.15, tip], [0.15, tip], [0.30, root]];
+  for (let k = 0; k < Z; k++) for (const [f, rad] of prof) { const a = (k + f) * p; pts.push(new T3.Vector2(Math.cos(a) * rad, Math.sin(a) * rad)); }
+  let shape;
+  if (internal) { shape = new T3.Shape(); shape.absarc(0, 0, rimOut, 0, 2 * Math.PI, false); shape.holes.push(new T3.Path(pts)); }
+  else shape = new T3.Shape(pts);
+  const g = new T3.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: false, curveSegments: 48 });
+  g.translate(0, 0, -thick / 2);
+  return g;
+}
+/*G3D_END*/
+
+// ---- 3D 보기 (three.js는 처음 3D를 켤 때 한 번만 불러옵니다) ----
+const THREE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+const ORBIT_URL = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const el = document.createElement('script'); el.src = src; el.async = false;
+    el.onload = res; el.onerror = () => rej(new Error('load failed: ' + src)); document.head.appendChild(el);
+  });
+}
+let threeP = null;
+function ensureThree() {
+  if (!threeP) threeP = loadScript(THREE_URL).then(() => loadScript(ORBIT_URL)).catch(e => { threeP = null; throw e; });
+  return threeP;
+}
+function initView(ctl) {
+  const T3 = THREE, box = $(ctl.box);
+  const renderer = new T3.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = T3.sRGBEncoding; renderer.setClearColor(0x000000, 0); renderer.autoClear = false;
+  box.appendChild(renderer.domElement);
+  const scene = new T3.Scene(), camera = new T3.PerspectiveCamera(40, 1, 1, 4000);
+  camera.up.set(0, -1, 0);                       // 2D 화면과 같은 좌표 방향(x 오른쪽, y 아래쪽)으로 본다
+  scene.add(new T3.HemisphereLight(0xffffff, 0x445566, 0.95));
+  const l1 = new T3.DirectionalLight(0xffffff, 0.9); l1.position.set(-60, -90, -140); scene.add(l1);
+  const l2 = new T3.DirectionalLight(0xffffff, 0.35); l2.position.set(80, 60, -60); scene.add(l2);
+  const group = new T3.Group(); scene.add(group);
+  const controls = new T3.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false;
+  controls.addEventListener('change', () => { ctl.camMoved = true; });
+  const fadeScene = new T3.Scene(), fadeCam = new T3.OrthographicCamera(-1, 1, 1, -1, 0, 1);   // 잔상용: 이전 화면을 서서히 지우는 판
+  const fadeMat = new T3.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, depthTest: false, depthWrite: false,
+    blending: T3.CustomBlending, blendEquation: T3.AddEquation, blendSrc: T3.ZeroFactor, blendDst: T3.OneMinusSrcAlphaFactor });
+  fadeScene.add(new T3.Mesh(new T3.PlaneGeometry(2, 2), fadeMat));
+  Object.assign(ctl, { renderer, scene, camera, controls, group, fadeScene, fadeCam, fadeMat, size: 0, ready: true });
+}
+function setCamCtl(ctl, name) {
+  const T3 = THREE, D = ctl.camD();
+  const dir = { front: [0, 0, -1], oblique: [-0.55, -0.55, -0.9], side: [-1, 0, -0.12] }[name];
+  const v = new T3.Vector3(...dir).normalize().multiplyScalar(D);
+  const tz = ctl.targetZ || 0;
+  ctl.camera.position.set(v.x, v.y, v.z + tz); ctl.controls.target.set(0, 0, tz);
+  ctl.controls.minDistance = 30; ctl.controls.maxDistance = D * 2.5; ctl.controls.update(); ctl.camMoved = true;
+}
+function disposeGroup(ctl) {
+  const g = ctl.group;
+  while (g.children.length) { const c = g.children.pop(); c.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
+}
+function renderCtl(ctl) {
+  if (!ctl.ready) return;
+  const key = ctl.key3();
+  if (key !== ctl.key) { const first = !ctl.obj; disposeGroup(ctl); ctl.obj = ctl.build(ctl); ctl.key = key; ctl.camMoved = true; if (first) setCamCtl(ctl, 'oblique'); }
+  const w = Math.max(1, Math.round($(ctl.box).clientWidth));
+  if (w !== ctl.size) { ctl.size = w; ctl.renderer.setSize(w, w, false); ctl.camera.aspect = 1; ctl.camera.updateProjectionMatrix(); ctl.camMoved = true; }
+  ctl.update(ctl, ctl.obj);
+  ctl.controls.update();
+  const r = ctl.renderer;
+  if (TRAIL.tau > 0 && !ctl.camMoved) { ctl.fadeMat.opacity = 1 - Math.exp(-FRAME_DT / TRAIL.tau); r.render(ctl.fadeScene, ctl.fadeCam); }
+  else r.clear(true, true, true);
+  r.clearDepth(); r.render(ctl.scene, ctl.camera);
+  ctl.camMoved = false;
+}
+function setSegIdx(el, i) { el.style.setProperty('--i', i); el.querySelectorAll('button').forEach((b, j) => b.setAttribute('aria-checked', j === i)); }
+function ctlShow(ctl, v) {
+  ctl.mode = v;
+  $(ctl.cv2).hidden = v === '3d'; $(ctl.cv3).hidden = v !== '3d'; $(ctl.tools).hidden = v !== '3d';
+  setSegIdx($(ctl.seg), v === '3d' ? 1 : 0);
+}
+async function ctlInit(ctl) {
+  if (ctl.ready) return true;
+  if (ctl.loading) return false;
+  ctl.loading = true; $(ctl.msg).textContent = '3D 엔진을 불러오는 중…';
+  try { await ensureThree(); initView(ctl); $(ctl.msg).textContent = ''; }
+  catch (e) { $(ctl.msg).textContent = '3D를 불러오지 못했습니다. 인터넷 연결과 브라우저의 WebGL 지원을 확인해 주세요.'; ctl.loading = false; return false; }
+  ctl.loading = false; return true;
+}
+function makeCtl(o) {
+  const ctl = Object.assign({ mode: '2d', want: '2d', ready: false, loading: false, key: '', obj: null, size: 0, camMoved: true }, o);
+  buildSegStr($(o.seg), [{ v: '2d', t: '2D' }, { v: '3d', t: '3D' }], '2d', async v => {
+    ctl.want = v;
+    if (v === '2d') { ctlShow(ctl, '2d'); return; }
+    setSegIdx($(o.seg), 1);
+    const ok = await ctlInit(ctl);
+    if (ctl.want !== '3d') return;
+    if (ok) { ctl.key = ''; ctlShow(ctl, '3d'); } else ctlShow(ctl, '2d');
+  });
+  document.querySelectorAll(`[data-ctl="${o.name}"]`).forEach(b => b.addEventListener('click', () => { if (ctl.ready) setCamCtl(ctl, b.dataset.cam); }));
+  return ctl;
+}
+
+// ---- 단일 유성기어 3D (실험실·앞 유성기어 공용) ----
+function simpleColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return { sun: cs.getPropertyValue('--accent').trim(), on: cs.getPropertyValue('--on').trim(), ring: '#aeb1b7', pin: '#e9e9ea' };
+}
+function buildSimple3D(ctl, spec) {
+  const T3 = THREE, { Zs, Zp, Zr, n, fixed } = spec, thick = 6, rc = (Zs + Zp) / 2, g = ctl.group, C = simpleColors();
+  const mat = (color, fx) => new T3.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.5, transparent: !!fx, opacity: fx ? 0.55 : 1 });
+  const dot = (color, r) => new T3.Mesh(new T3.SphereGeometry(r, 16, 12), new T3.MeshStandardMaterial({ color, roughness: 0.4 }));
+  const o = { pins: [], arms: [], cyl: [] };
+  o.sun = new T3.Mesh(makeGearGeom(T3, Zs, Zs / 2, thick, false), mat(C.sun, fixed === 'sun'));
+  let d = dot(0xffffff, 1.3); d.position.set(Zs * 0.3, 0, -thick / 2 - 0.2); o.sun.add(d);
+  o.ring = new T3.Mesh(makeGearGeom(T3, Zr, Zr / 2, thick, true, Zr / 2 + 6), mat(C.ring, fixed === 'ring'));
+  const rm = new T3.Mesh(new T3.BoxGeometry(3, 3, 1.4), new T3.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })); rm.position.set(Zr / 2 + 6 - 1.2, 0, -thick / 2 - 0.5); o.ring.add(rm);
+  const pg = makeGearGeom(T3, Zp, Zp / 2, thick, false), pm = mat(C.pin, false), am = mat(C.on, fixed === 'carrier');
+  const armG = new T3.BoxGeometry(rc, 2.6, 1.8), cylG = new T3.CylinderGeometry(1, 1, thick + 2.8, 16); cylG.rotateX(Math.PI / 2);
+  for (let i = 0; i < n; i++) {
+    const m = new T3.Mesh(pg, pm); d = dot(0x222222, 1); d.position.set(Zp * 0.3, 0, -thick / 2 - 0.2); m.add(d); o.pins.push(m); g.add(m);
+    const a = new T3.Mesh(armG, am); o.arms.push(a); g.add(a);
+    const c = new T3.Mesh(cylG, am); o.cyl.push(c); g.add(c);
+  }
+  const hub = new T3.Mesh(new T3.CylinderGeometry(3.5, 3.5, 1.8, 24), am); hub.rotation.x = Math.PI / 2; hub.position.z = thick / 2 + 0.9;
+  g.add(o.sun); g.add(o.ring); g.add(hub);
+  return o;
+}
+function updateSimple3D(o, spec, ang) {
+  const { Zs, Zp, n } = spec, rc = (Zs + Zp) / 2, thick = 6;
+  o.sun.rotation.z = ang.thS; o.ring.rotation.z = ang.thR;
+  for (let i = 0; i < n; i++) {
+    const a = ang.thC + i * TAU / n, cx = Math.cos(a), sy = Math.sin(a);
+    o.pins[i].position.set(rc * cx, rc * sy, 0); o.pins[i].rotation.z = meshPlanet(ang.thS, Zs, a, Zp);
+    o.cyl[i].position.set(rc * cx, rc * sy, 0.4);
+    o.arms[i].position.set(rc / 2 * cx, rc / 2 * sy, thick / 2 + 0.9); o.arms[i].rotation.z = a;
+  }
+}
+
+// ---- 뒤 라비뇨 3D: 기어 세트 + 클러치·브레이크 팩 ----
+function labelSprite(text) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 96; const c = cv.getContext('2d');
+  c.fillStyle = 'rgba(20,21,24,0.78)'; c.fillRect(8, 8, 240, 80);
+  c.font = 'bold 44px sans-serif'; c.fillStyle = '#ffffff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, 128, 50);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+  sp.scale.set(16, 6, 1); sp.renderOrder = 10; return sp;
+}
+function ringGeom(T3, ro, ri, th) {
+  const sh = new T3.Shape(); sh.absarc(0, 0, ro, 0, TAU, false);
+  const h = new T3.Path(); h.absarc(0, 0, ri, 0, TAU, true); sh.holes.push(h);
+  const g = new T3.ExtrudeGeometry(sh, { depth: th, bevelEnabled: false, curveSegments: 40 }); g.translate(0, 0, -th / 2); return g;
+}
+// ly: 라벨 높이. 이웃 팩끼리 높이를 엇갈려 옆에서 볼 때 라벨이 겹치지 않게 한다.
+const PACKS = [
+  { id: 'UD', z: -22, kind: 'clutch', label: 'UD', drum: 'slow', hub: 'th1', hubIn: 2.2, ly: -33 },
+  { id: 'OD', z: 15, kind: 'clutch', label: 'OD', drum: 'in', hub: 'thCR', hubIn: 3.6, ly: -33 },
+  { id: 'LR', z: 25, kind: 'brake', label: 'L&R', drum: 'fixed', hub: 'thCR', hubIn: 3.6, ly: -42 },
+  { id: '35R', z: 35, kind: 'clutch', label: '3-5/R', drum: 'in', hub: 'th2', hubIn: 1.6, ly: -33 },
+  { id: '26', z: 45, kind: 'brake', label: '2-6', drum: 'fixed', hub: 'th2', hubIn: 1.6, ly: -42 }
+];
+const GREY = 0x7d8086;
+function buildRear3D(ctl) {
+  const T3 = THREE, g = ctl.group, T = 6, { Z1, Z2, ZR, Zpl, Zps, nR } = PG, C = simpleColors();
+  const cs = getComputedStyle(document.documentElement);
+  C.s2 = cs.getPropertyValue('--s2').trim(); C.red = cs.getPropertyValue('--red').trim();
+  const mat = (color, op) => new T3.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.5, transparent: op < 1, opacity: op });
+  const dot = (color, r) => new T3.Mesh(new T3.SphereGeometry(r, 16, 12), new T3.MeshStandardMaterial({ color, roughness: 0.4 }));
+  const o = { pairs: [], packs: [], C };
+  // 앞층(z<0): 선기어1 + 짧은 피니언 / 뒤층(z>0): 선기어2 + 링기어 + 긴 피니언 (짧은 피니언은 두 층에 걸쳐 있음)
+  o.s1 = new T3.Mesh(makeGearGeom(T3, Z1, Z1 / 2, T, false), mat(C.sun, 1)); o.s1.position.z = -3.5;
+  let d = dot(0xffffff, 1.3); d.position.set(Z1 * 0.4, 0, -T / 2 - 0.2); o.s1.add(d);
+  o.s2 = new T3.Mesh(makeGearGeom(T3, Z2, Z2 / 2, T, false), mat(C.s2, 1)); o.s2.position.z = 3.5;
+  d = dot(0xffffff, 1.2); d.position.set(Z2 * 0.3, 0, -T / 2 - 0.2); o.s2.add(d);
+  o.ring = new T3.Mesh(makeGearGeom(T3, ZR, ZR / 2, T, true, ZR / 2 + 6), mat(C.ring, 0.85)); o.ring.position.z = 3.5;
+  const rm = new T3.Mesh(new T3.BoxGeometry(3, 3, 1.4), new T3.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })); rm.position.set(ZR / 2 + 6 - 1.2, 0, -T / 2 - 0.5); o.ring.add(rm);
+  const sg = makeGearGeom(T3, Zps, Zps / 2, 13, false), lg = makeGearGeom(T3, Zpl, Zpl / 2, T, false);
+  const pm = mat(C.pin, 1), am = mat(C.on, 1), rS3 = (Z1 + Zps) / 2, rL3 = (Z2 + Zpl) / 2;
+  const armS = new T3.BoxGeometry(rS3, 2.6, 1.6), armL = new T3.BoxGeometry(rL3, 2.6, 1.6), cylG = new T3.CylinderGeometry(1, 1, 17, 16); cylG.rotateX(Math.PI / 2);
+  for (let i = 0; i < nR; i++) {
+    const P = {};
+    P.s = new T3.Mesh(sg, pm); d = dot(0x222222, 1); d.position.set(Zps * 0.3, 0, -13 / 2 - 0.2); P.s.add(d); g.add(P.s);
+    P.l = new T3.Mesh(lg, pm); P.l.position.z = 3.5; d = dot(0x222222, 1); d.position.set(Zpl * 0.3, 0, -T / 2 - 0.2); P.l.add(d); g.add(P.l);
+    P.armS = new T3.Mesh(armS, am); P.armL = new T3.Mesh(armL, am); P.cS = new T3.Mesh(cylG, am); P.cL = new T3.Mesh(cylG, am);
+    [P.armS, P.armL, P.cS, P.cL].forEach(m => g.add(m)); o.pairs.push(P);
+  }
+  const hub = new T3.Mesh(new T3.CylinderGeometry(5, 5, 1.6, 24), am); hub.rotation.x = Math.PI / 2; hub.position.z = 8.8; g.add(hub);
+  g.add(o.s1); g.add(o.s2); g.add(o.ring);
+  // 축: 선기어1 축(-z), 선기어2 축(+z), 캐리어 튜브(+z)
+  const shaft = (r, z0, z1, open) => { const m = new T3.Mesh(new T3.CylinderGeometry(r, r, z1 - z0, 20, 1, !!open), new T3.MeshStandardMaterial({ color: GREY, metalness: 0.3, roughness: 0.5, transparent: !!open, opacity: open ? 0.5 : 1, side: open ? T3.DoubleSide : T3.FrontSide }));
+    m.rotation.x = Math.PI / 2; m.position.z = (z0 + z1) / 2; g.add(m); return m; };
+  o.sh1 = shaft(2.2, -26, -6.5); o.sh2 = shaft(1.6, 6.5, 49.5); o.shC = shaft(3.6, 9.6, 29, true);
+  // 클러치·브레이크 팩
+  const discTh = 0.7, cache = {};
+  PACKS.forEach(pk => {
+    const P = { def: pk, gap: 0.9, drums: [], hubs: [], color: new T3.Color(GREY), tgt: new T3.Color() };
+    P.mat = new T3.MeshStandardMaterial({ color: GREY, metalness: 0.4, roughness: 0.5, emissive: 0x000000 });
+    const dg = cache.d || (cache.d = ringGeom(T3, 26, 13, discTh)), hk = 'h' + pk.hubIn, hg = cache[hk] || (cache[hk] = ringGeom(T3, 20, pk.hubIn, discTh));
+    for (let i = 0; i < 5; i++) {
+      const drum = i % 2 === 0, m = new T3.Mesh(drum ? dg : hg, P.mat);
+      const b = new T3.Mesh(new T3.BoxGeometry(2.6, 2.6, 1.2), new T3.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })); b.position.set(drum ? 24 : 18, 0, -discTh / 2 - 0.3); m.add(b);
+      g.add(m); (drum ? P.drums : P.hubs).push(m);
+    }
+    P.shell = new T3.Mesh(new T3.CylinderGeometry(27, 27, 7, 32, 1, true), new T3.MeshStandardMaterial({ color: GREY, transparent: true, opacity: 0.22, side: T3.DoubleSide, metalness: 0.2, roughness: 0.6 }));
+    P.shell.rotation.x = Math.PI / 2; P.shell.position.z = pk.z;
+    if (pk.kind === 'brake') {           // 고정된 케이스 돌기 3개
+      const lm = new T3.MeshStandardMaterial({ color: 0xb0b3b8, roughness: 0.5 }), lgm = new T3.BoxGeometry(3.4, 3.4, 6);
+      for (let k = 0; k < 3; k++) { const l = new T3.Mesh(lgm, lm), a = k * TAU / 3; l.position.set(Math.cos(a) * 28.5, Math.sin(a) * 28.5, pk.z); l.rotation.z = a; g.add(l); }
+    } else {                             // 회전하는 드럼 표시
+      const mk = new T3.Mesh(new T3.BoxGeometry(3.4, 6, 3.4), new T3.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })); mk.position.set(27.5, 0, 0); P.shell.add(mk);
+    }
+    g.add(P.shell);
+    const sp = labelSprite(pk.label); sp.position.set(0, pk.ly, pk.z); g.add(sp); P.label = sp;
+    o.packs.push(P);
+  });
+  return o;
+}
+function updateRear3D(ctl, o) {
+  const has = id => lastActive.includes(id), C = o.C, T3 = THREE, n = PG.nR;
+  const on = { UD: has('UD'), OD: has('OD'), LR: has('LR') || has('OWC'), '35R': has('35R'), '26': has('26') };
+  const S = (PG.Z1 + PG.Zps) / 2, L = (PG.Z2 + PG.Zpl) / 2;
+  o.s1.rotation.z = vis.th1; o.s2.rotation.z = vis.th2; o.ring.rotation.z = vis.thR;
+  for (let i = 0; i < n; i++) {
+    const P = o.pairs[i], al = vis.thCR + i * TAU / n, as = al + phi;
+    const ths = meshPlanet(vis.th1, PG.Z1, as, PG.Zps), thl = meshPlanet(ths, PG.Zps, gam0 + al, PG.Zpl);
+    P.s.position.set(S * Math.cos(as), S * Math.sin(as), 0); P.s.rotation.z = ths;
+    P.l.position.x = L * Math.cos(al); P.l.position.y = L * Math.sin(al); P.l.rotation.z = thl;
+    P.cS.position.set(S * Math.cos(as), S * Math.sin(as), 1.1); P.cL.position.set(L * Math.cos(al), L * Math.sin(al), 1.1);
+    P.armS.position.set(S / 2 * Math.cos(as), S / 2 * Math.sin(as), 8.8); P.armS.rotation.z = as;
+    P.armL.position.set(L / 2 * Math.cos(al), L / 2 * Math.sin(al), 8.8); P.armL.rotation.z = al;
+  }
+  const a = 1 - Math.exp(-FRAME_DT / 0.12), th = 0.7;
+  o.packs.forEach(P => {
+    const pk = P.def, eng = on[pk.id];
+    P.gap += ((eng ? 0.05 : 0.9) - P.gap) * a;
+    P.tgt.set(eng ? (pk.kind === 'brake' ? C.red : C.on) : GREY); P.mat.color.lerp(P.tgt, a); P.mat.emissive.copy(P.mat.color).multiplyScalar(eng ? 0.3 : 0);
+    P.shell.material.color.copy(P.mat.color);
+    const dAng = pk.drum === 'slow' ? vis.thC : pk.drum === 'in' ? vis.thS : 0, hAng = vis[pk.hub];
+    for (let i = 0; i < 5; i++) {
+      const drum = i % 2 === 0, m = drum ? P.drums[i / 2] : P.hubs[(i - 1) / 2];
+      m.position.z = pk.z + (i - 2) * (th + P.gap); m.rotation.z = drum ? dAng : hAng;
+    }
+    if (pk.kind === 'clutch') P.shell.rotation.y = dAng;
+  });
+  // 팩은 기어 세트 뒤에 있어 정면에 가까울수록 라벨이 한데 몰리므로, 축에서 벗어난 정도에 따라 라벨을 흐리게 한다.
+  const cd = ctl.camera.position.clone().sub(ctl.controls.target), off = Math.hypot(cd.x, cd.y) / cd.length();
+  const lo = Math.min(1, Math.max(0, (off - 0.35) / 0.25));
+  o.packs.forEach(P => { P.label.material.opacity = lo; P.label.visible = lo > 0.01; });
+  const col = (m, c) => { m.material.color.lerp(new T3.Color(c), a); };
+  col(o.sh1, on.UD ? C.on : GREY); col(o.sh2, on['35R'] ? C.on : on['26'] ? C.red : GREY); col(o.shC, on.OD ? C.on : on.LR ? C.red : GREY);
+}
+
+// 컨트롤러: 실험실(L) · 앞 유성기어(F) · 뒤 유성기어(R)
+const ctlL = makeCtl({ name: 'L', seg: 'labView', cv2: 'labCv2', cv3: 'labCv3', box: 'lab3d', tools: 'lab3dTools', msg: 'lab3dMsg',
+  key3: () => [lab.Zs, lab.Zp, lab.n, lab.fixed].join('|'), camD: () => (labZr() / 2 + 6) * 3.8,
+  build: c => buildSimple3D(c, { Zs: lab.Zs, Zp: lab.Zp, Zr: labZr(), n: lab.n, fixed: lab.fixed }),
+  update: (c, o) => updateSimple3D(o, { Zs: lab.Zs, Zp: lab.Zp, n: lab.n }, { thS: lab.thS, thC: lab.thC, thR: lab.thR }) });
+const ctlF = makeCtl({ name: 'F', seg: 'viewF', cv2: 'cv2F', cv3: 'cv3F', box: 'box3F', tools: 'tools3F', msg: 'msg3F',
+  key3: () => [PG.Zs, PG.Zp, PG.nF].join('|'), camD: () => (PG.Zr / 2 + 6) * 3.8,
+  build: c => buildSimple3D(c, { Zs: PG.Zs, Zp: PG.Zp, Zr: PG.Zr, n: PG.nF, fixed: 'ring' }),
+  update: (c, o) => updateSimple3D(o, { Zs: PG.Zs, Zp: PG.Zp, n: PG.nF }, { thS: vis.thS, thC: vis.thC, thR: ringF0 }) });
+const ctlR = makeCtl({ name: 'R', seg: 'viewR', cv2: 'cv2R', cv3: 'cv3R', box: 'box3R', tools: 'tools3R', msg: 'msg3R', targetZ: 11,
+  key3: () => [PG.Z1, PG.Z2, PG.ZR, PG.Zpl, PG.Zps, PG.nR].join('|'), camD: () => (PG.ZR / 2 + 6) * 3.7,
+  build: c => buildRear3D(c), update: (c, o) => updateRear3D(c, o) });
+
+function drawLab(dt) {
+  const base = lab.speed * 2.2 * dt, w = lab.w;
+  lab.thS += w.sun * base; lab.thC += w.carrier * base; lab.thR += w.ring * base;
+  lab.rev.sun += w.sun * base / TAU; lab.rev.carrier += w.carrier * base / TAU; lab.rev.ring += w.ring * base / TAU; lab.rev.pin += lab.wp * base / TAU;
+  if (ctlL.mode === '3d') renderCtl(ctlL);
+  else drawSimple(gcL, cL, { Zs: lab.Zs, Zr: labZr(), Zp: lab.Zp, fixed: lab.fixed, n: lab.n }, lab.thS, lab.thC, lab.thR);
+  LK.concat(['pin']).forEach(k => setText('lv_' + k, fmtRev(lab.rev[k])));
+}
+
+// ---- 앞·뒤 유성기어 잇수 직접 설정 ----
+const stepperHTML = (id, label, step) => `<div class="st"><span>${label}</span><div class="stp"><button type="button" data-f="${id}" data-d="-${step}" aria-label="${label} 줄이기">−</button><input id="in_${id}" type="text" inputmode="numeric" class="num" aria-label="${label}"><button type="button" data-f="${id}" data-d="${step}" aria-label="${label} 늘리기">+</button></div></div>`;
+function pgAfterChange() {
+  PG.custom = ['Zs', 'Zr', 'Zp', 'nF', 'Z1', 'Z2', 'ZR', 'Zpl', 'Zps', 'nR'].some(k => PG[k] !== PG0[k]);
+  pgDerive();
+  vis.thS = 0; vis.thC = 0; vis.th1 = 0; vis.thCR = 0; vis.th2 = sun2_0; vis.thR = ringR0;
+  const L = { F: [`선기어 ${PG.Zs}T`, `링기어 ${PG.Zr}T`, '캐리어', `피니언 ${PG.Zp}T×${PG.nF}`],
+    R: [`선기어 1 · ${PG.Z1}T`, `선기어 2 · ${PG.Z2}T`, '캐리어', `링기어 ${PG.ZR}T`, `피니언 ${PG.Zpl}T·${PG.Zps}T×${PG.nR}`] };
+  ['F', 'R'].forEach(k => L[k].forEach((t, i) => setText(k + 'n' + i, t)));
+}
+const fillSel = (id, ns, cur) => { $(id).innerHTML = ns.map(n => `<option value="${n}"${n === cur ? ' selected' : ''}>${n}개</option>`).join(''); };
+function simpleEdit(S, which, raw, L) {
+  const val = Math.round(parseFloat(raw)); let msg = '';
+  if (!Number.isFinite(val)) return msg;
+  if (which === 's') S.Zs = clamp(val, L.sMin, L.sMax);
+  else if (which === 'p') S.Zp = clamp(val, L.pMin, L.pMax);
+  else {
+    const Zr = which === 'r' ? val : val - S.Zs;
+    S.Zp = clamp(Math.round((Zr - S.Zs) / 2), L.pMin, L.pMax);
+    const fz = S.Zs + 2 * S.Zp;
+    if (which === 'r' && fz !== Zr) msg = `링기어 = 선기어 + 피니언 × 2 이므로 ${fz}T로 맞췄습니다.`;
+    if (which === 'c' && S.Zs + fz !== val) msg = `캐리어 가상 잇수 = 선기어 + 링기어 이므로 ${S.Zs + fz}T로 맞췄습니다.`;
+  }
+  if (S.Zs + 2 * S.Zp > L.rMax) { S.Zp = Math.floor((L.rMax - S.Zs) / 2); msg = `링기어는 최대 ${L.rMax}T까지 지원합니다. 피니언을 줄여 맞췄습니다.`; }
+  return msg;
+}
+
+// 앞 유성기어 편집기
+const FED = { Zs: PG.Zs, Zp: PG.Zp, n: PG.nF, msg: '' }, FLIM = { sMin: 12, sMax: 100, pMin: 6, pMax: 50, rMax: 200 };
+$('setF').innerHTML = `<div class="stepgrid">${stepperHTML('Fs', '선기어 잇수', 1)}${stepperHTML('Fr', '링기어 잇수', 2)}${stepperHTML('Fp', '피니언 잇수', 1)}${stepperHTML('Fc', '캐리어 가상 잇수', 2)}</div>
+  <div class="two-col" style="margin-top:10px"><label class="sub" style="margin:0">피니언 개수<select class="sel num" id="Fn_sel" style="margin-top:6px"></select></label><div style="align-self:end"><button class="qb" id="Freset" type="button" style="width:100%">기본값으로</button></div></div>
+  <p class="lab-msg" id="Fmsg" aria-live="polite" style="margin-top:8px"></p>`;
+function frontApply() {
+  const ns = validNs(FED.Zs, FED.Zp);
+  if (!ns.includes(FED.n)) FED.n = [4, 3, 2, 1].find(n => ns.includes(n));
+  PG.Zs = FED.Zs; PG.Zp = FED.Zp; PG.Zr = FED.Zs + 2 * FED.Zp; PG.nF = FED.n;
+  fillSel('Fn_sel', ns, FED.n);
+  $('in_Fs').value = FED.Zs; $('in_Fp').value = FED.Zp; $('in_Fr').value = PG.Zr; $('in_Fc').value = FED.Zs + PG.Zr;
+  $('Fmsg').textContent = FED.msg; pgAfterChange();
+}
+const fmap = { Fs: 's', Fr: 'r', Fp: 'p', Fc: 'c' };
+function frontSet(id, raw) { FED.msg = simpleEdit(FED, fmap[id], raw, FLIM); frontApply(); }
+$('setF').querySelectorAll('.stp button').forEach(b => b.addEventListener('click', () => {
+  const cur = { Fs: FED.Zs, Fr: PG.Zr, Fp: FED.Zp, Fc: FED.Zs + PG.Zr }[b.dataset.f]; frontSet(b.dataset.f, cur + (+b.dataset.d));
+}));
+['Fs', 'Fr', 'Fp', 'Fc'].forEach(id => { $('in_' + id).addEventListener('change', e => frontSet(id, e.target.value)); $('in_' + id).addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); }); });
+$('Fn_sel').addEventListener('change', e => { FED.n = +e.target.value; FED.msg = ''; frontApply(); });
+$('Freset').addEventListener('click', () => { Object.assign(FED, { Zs: PG0.Zs, Zp: PG0.Zp, n: PG0.nF, msg: '' }); frontApply(); });
+
+// 뒤 라비뇨 편집기: 조립 가능한 조합만 허용
+const RED = { Z1: PG.Z1, Z2: PG.Z2, Zpl: PG.Zpl, Zps: PG.Zps, n: PG.nR, msg: '' }, RLIM = { Z1: [16, 90], Z2: [10, 60], Zpl: [8, 50], Zps: [8, 50] };
+const rearZR = S => S.Z2 + 2 * S.Zpl;
+function rearCheck(S) {
+  const ZR = rearZR(S), rSx = (S.Z1 + S.Zps) / 2, rLx = (S.Z2 + S.Zpl) / 2, d = (S.Zps + S.Zpl) / 2;
+  if (!(d < rSx + rLx && d > Math.abs(rSx - rLx))) return '피니언과 선기어의 중심 거리가 맞지 않아 조립할 수 없는 조합입니다.';
+  if (S.Z1 + 2 * S.Zps > ZR - 2) return '짧은 피니언이 링기어에 닿는 조합입니다.';
+  if (S.Z1 < S.Z2 + 2) return '선기어 1은 선기어 2보다 2T 이상 커야 짧은 피니언이 선기어 2에 닿지 않습니다.';
+  if (ZR > 200) return '링기어는 최대 200T까지 지원합니다.';
+  return '';
+}
+function rearNs(S) {
+  const ZR = rearZR(S), rSx = (S.Z1 + S.Zps) / 2, rLx = (S.Z2 + S.Zpl) / 2, fam = a => Math.sqrt(a[0] * a[0] + a[1] * a[1]);
+  return [1, 2, 3, 4, 5, 6].filter(N => {
+    if ((S.Z1 + S.Z2) % N || (ZR - S.Z1) % N) return false;
+    if (N === 1) return true;
+    const pos = (r, a) => [r * Math.cos(a), r * Math.sin(a)], ph = Math.acos(clamp(((rSx * rSx + rLx * rLx - ((S.Zps + S.Zpl) / 2) ** 2) / (2 * rSx * rLx)), -1, 1));
+    const rs = S.Zps / 2, rl = S.Zpl / 2;
+    for (let j = 1; j < N; j++) {
+      const a = j * TAU / N, L0 = pos(rLx, 0), Lj = pos(rLx, a), S0 = pos(rSx, ph), Sj = pos(rSx, a + ph);
+      const dist = (u, v) => fam([u[0] - v[0], u[1] - v[1]]);
+      if (dist(L0, Lj) < 2 * rl + 1.5 || dist(S0, Sj) < 2 * rs + 1.5 || dist(L0, Sj) < rl + rs + 1.5 || dist(S0, Lj) < rl + rs + 1.5) return false;
+    }
+    return true;
+  });
+}
+$('setR').innerHTML = `<div class="stepgrid">${stepperHTML('R1', '선기어 1 잇수', 1)}${stepperHTML('R2', '선기어 2 잇수', 1)}${stepperHTML('Rr', '링기어 잇수', 2)}${stepperHTML('Rl', '긴 피니언 잇수', 1)}${stepperHTML('Rs', '짧은 피니언 잇수', 1)}</div>
+  <div class="two-col" style="margin-top:10px"><label class="sub" style="margin:0">피니언 쌍 개수<select class="sel num" id="Rn_sel" style="margin-top:6px"></select></label><div style="align-self:end"><button class="qb" id="Rreset" type="button" style="width:100%">기본값으로</button></div></div>
+  <p class="lab-msg" id="Rmsg" aria-live="polite" style="margin-top:8px"></p>
+  <p class="hint3" style="margin-top:0">링기어 = 선기어 2 + 긴 피니언 × 2. 실제로 조립할 수 있는 조합만 적용되며, 변속비는 잇수에 따라 공식 값과 달라집니다.</p>`;
+function rearApply() {
+  const ns = rearNs(RED);
+  if (!ns.includes(RED.n)) RED.n = [4, 3, 2, 1].find(n => ns.includes(n)) || 1;
+  Object.assign(PG, { Z1: RED.Z1, Z2: RED.Z2, Zpl: RED.Zpl, Zps: RED.Zps, ZR: rearZR(RED), nR: RED.n });
+  fillSel('Rn_sel', ns.length ? ns : [1], RED.n);
+  $('in_R1').value = RED.Z1; $('in_R2').value = RED.Z2; $('in_Rr').value = rearZR(RED); $('in_Rl').value = RED.Zpl; $('in_Rs').value = RED.Zps;
+  $('Rmsg').textContent = RED.msg; pgAfterChange();
+}
+function rearSet(id, raw) {
+  const val = Math.round(parseFloat(raw)); if (!Number.isFinite(val)) return rearApply();
+  const bak = Object.assign({}, RED), S = Object.assign({}, RED); let msg = '';
+  if (id === 'R1') S.Z1 = clamp(val, ...RLIM.Z1);
+  else if (id === 'R2') S.Z2 = clamp(val, ...RLIM.Z2);
+  else if (id === 'Rl') S.Zpl = clamp(val, ...RLIM.Zpl);
+  else if (id === 'Rs') S.Zps = clamp(val, ...RLIM.Zps);
+  else { S.Zpl = clamp(Math.round((val - S.Z2) / 2), ...RLIM.Zpl); if (rearZR(S) !== val) msg = `링기어 = 선기어 2 + 긴 피니언 × 2 이므로 ${rearZR(S)}T로 맞췄습니다.`; }
+  let why = rearCheck(S);
+  if (why && id !== 'Rs') {          // 짧은 피니언을 조정해서 조립 가능한 조합을 찾아본다
+    for (let dz = 0; dz <= 42 && why; dz++) for (const sg of [1, -1]) {
+      const z = RED.Zps + sg * dz; if (z < RLIM.Zps[0] || z > RLIM.Zps[1]) continue;
+      const T = Object.assign({}, S, { Zps: z }); if (!rearCheck(T)) { S.Zps = z; why = ''; msg = (msg ? msg + ' ' : '') + `짧은 피니언을 ${z}T로 맞췄습니다.`; break; }
+    }
+  }
+  if (why) { Object.assign(RED, bak); RED.msg = why + ' 입력을 되돌렸습니다.'; return rearApply(); }
+  Object.assign(RED, S, { msg }); rearApply();
+}
+$('setR').querySelectorAll('.stp button').forEach(b => b.addEventListener('click', () => {
+  const cur = { R1: RED.Z1, R2: RED.Z2, Rr: rearZR(RED), Rl: RED.Zpl, Rs: RED.Zps }[b.dataset.f]; rearSet(b.dataset.f, cur + (+b.dataset.d));
+}));
+['R1', 'R2', 'Rr', 'Rl', 'Rs'].forEach(id => { $('in_' + id).addEventListener('change', e => rearSet(id, e.target.value)); $('in_' + id).addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); }); });
+$('Rn_sel').addEventListener('change', e => { RED.n = +e.target.value; RED.msg = ''; rearApply(); });
+$('Rreset').addEventListener('click', () => { Object.assign(RED, { Z1: PG0.Z1, Z2: PG0.Z2, Zpl: PG0.Zpl, Zps: PG0.Zps, n: PG0.nR, msg: '' }); rearApply(); });
+frontApply(); rearApply();
+
+labApply();
+
+// 탭
+buildSegStr($('segStudy'), [{ v: 'chart', t: '작동표 퀴즈' }, { v: 'calc', t: '잇수 계산' }], 'chart', v => {
+  $('pChart').hidden = v !== 'chart'; $('pCalc').hidden = v !== 'calc';
+});
+newQ(); newCalc();
+
+let prev = performance.now(), lastGear = null, lastLever = null, lastManual = 0, lastEl = '', lastMsg = null;
+function setText(id, t) { const e = $(id); if (e.textContent !== t) e.textContent = t; }
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+  const n = Math.ceil(dt / 0.008);
+  for (let i = 0; i < n; i++) step(dt / n);
+
+  const rpm = sim.we * 30 / Math.PI, kmh = Math.abs(sim.v) * 3.6;
+  const k = Math.min(1, dt * 14);
+  disp.rpm += (rpm - disp.rpm) * k; disp.kmh += (kmh - disp.kmh) * k;
+
+  const px = cv.clientWidth * (window.devicePixelRatio || 1);
+  if (px > 0 && cv.width !== Math.round(px)) { cv.width = Math.round(px); cv.height = Math.round(px / 2); }
+  ctx.setTransform(cv.width / 640, 0, 0, cv.width / 640, 0, 0);
+  ctx.clearRect(0, 0, 640, 320);
+  const v = cssv();
+  const c = { ink: '#e9e9ea', dim: '#7d8086', accent: v('--accent'), red: v('--red') };
+  dial(160, 165, 140, disp.rpm, 7000, 500, 2, x => String(x / 1000), 6500, 'x1000 rpm', c);
+  dial(480, 165, 140, disp.kmh, 240, 10, 4, x => String(x), null, 'km/h', c);
+
+  const tg = targetGear();
+  const gTxt = tg === 'N' ? 'N' : tg === 'R' ? 'R' : (sim.manual ? 'M' : 'D') + tg;
+  setText('gearTxt', gTxt);
+  setText('rpmTxt', String(Math.round(rpm / 10) * 10));
+  setText('kmhTxt', String(Math.round(kmh)));
+  const ps = Math.max(0, sim.Teng * sim.we / 735.5);
+  setText('psTxt', String(Math.round(ps)));
+
+  if (sim.lever !== lastLever) {
+    lastLever = sim.lever;
+    $('seg').style.setProperty('--i', LEVERS.indexOf(sim.lever));
+    $('seg').querySelectorAll('button').forEach(b => { const on = b.dataset.k === sim.lever; b.setAttribute('aria-checked', on); b.tabIndex = on ? 0 : -1; });
+  }
+  if (sim.manual !== lastManual) {
+    lastManual = sim.manual;
+    $('gears').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.n === sim.manual));
+  }
+  if (sim.msg !== lastMsg) { lastMsg = sim.msg; const m = $('msg'); m.textContent = sim.msg; m.classList.toggle('warn', sim.warn); }
+
+  // 작동 요소: LR은 1단에서 8km/h 이상일 때 함께 작동(엔진 브레이크)
+  let active = CHART[tg].slice();
+  if (tg === 1 && kmh > 8) active.push('LR');
+  const key = active.join(',') + (sim.shift ? '*' : '');
+  if (key !== lastEl) {
+    lastEl = key;
+    document.querySelectorAll('.el').forEach(e => {
+      const on = active.includes(e.dataset.e);
+      e.classList.toggle('on', on && !sim.shift);
+      e.classList.toggle('half', on && !!sim.shift);
+    });
+    $('elSub').textContent = tg === 'N' ? 'N 레인지: 모든 요소 해제' :
+      (tg === 'R' ? 'R' : tg + '단') + ' : ' + active.map(id => EL.find(e => e.id === id).name).join(' + ') + (sim.shift ? ' (변속 중)' : '');
+  }
+  FRAME_DT = dt;
+  drawGears(dt, tg, active);
+  drawQ(dt);
+  drawLab(dt);
+  updatePathLive(active);
+  if (tg !== lastGear) {
+    lastGear = tg;
+    document.querySelectorAll('#tbody tr').forEach(tr => tr.classList.toggle('on', tr.dataset.g === String(tg)));
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
