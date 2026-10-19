@@ -7,46 +7,28 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=20261020a">
 </head>
 <body>
 <main>
-  <header>
+  <header class="hero-head">
+    <p class="eyebrow">주행 시뮬레이터</p>
     <h1>쏘나타 2.0 · 6단 자동변속기</h1>
-    <p>140마력(PS) 2.0 가솔린 엔진과 A6 계열 6단 자동변속기를 단순화해 만든 주행 시뮬레이터입니다.</p>
+    <p>140마력 2.0 가솔린 엔진과 A6 계열 6단 자동변속기. 운전하고, 안을 들여다보고, 원리를 배웁니다.</p>
   </header>
   <nav class="secnav" aria-label="바로가기">
     <a href="#drive">운전</a><a href="#trans3d">변속기 단면</a><a href="#gt">유성기어 원리</a><a href="#tcCard">토크 컨버터</a><a href="#logCard">기록</a><a href="#mapCard">변속 지도</a><a href="#missions">과제</a><a href="#lab">실험실</a><a href="#study">공부</a><a href="#ratios">기어비</a>
     <button type="button" id="liteBtn" aria-pressed="false" title="3D 화면의 해상도와 그리는 횟수를 줄여 느린 기기에서 부드럽게 합니다">3D 가볍게</button>
   </nav>
-  <section class="guide" id="guide" aria-label="처음 오셨나요" hidden>
-    <div class="guide-head"><b>처음 오셨나요? 이 순서로 둘러보세요</b><button class="qb" type="button" id="guideClose" style="flex:none;padding:6px 12px;font-size:13px;margin:0">닫기</button></div>
-    <div class="guide-steps">
-      <a href="#drive"><em>1. 운전해 보기</em><b>레버 D, 가속 페달</b><span>계기판과 3D 차로 변속이 언제 일어나는지 느껴 보세요.</span></a>
-      <a href="#trans3d"><em>2. 변속기 속 보기</em><b>단면 3D</b><span>어느 클러치가 물리고 기어가 어떻게 도는지 봅니다. 슬로 모션도 있습니다.</span></a>
-      <a href="#missions"><em>3. 공부하고 도전하기</em><b>운전 과제 · 공부 모드</b><span>배운 내용을 과제와 퀴즈로 확인하세요.</span></a>
-    </div>
-  </section>
 
-  <div class="layout">
-    <div class="stack">
-      <div class="cluster">
-        <canvas id="cv" width="960" height="480" role="img" aria-label="RPM 게이지와 속도계. 수치는 아래에 글자로도 나옵니다."></canvas>
-        <div class="readout num">
-          <div><b id="gearTxt">N</b><span>단수</span></div>
-          <div><b id="rpmTxt">800</b><span>rpm</span></div>
-          <div><b id="kmhTxt">0</b><span>km/h</span></div>
-          <div><b id="psTxt">0</b><span>PS</span></div>
-        </div>
-      </div>
-
+  <section class="hero-drive">
       <div class="card" id="drive">
-        <h2 style="margin:0 0 4px">주행 보기 (3D)</h2>
-        <p class="gt-sub">레버와 페달로 움직이는 차를 3D로 봅니다. 도로를 고르면 굽은 길·언덕·서킷을 달립니다(코스에서는 핸들을 자동으로 돌리고, 속도와 변속은 직접). 끌어서 시점을 돌릴 수 있고(휴대폰은 두 손가락), 차를 누르면 변속기 속을 3D로 봅니다.</p>
+        <div class="drive-top"><h2>주행</h2>
         <div class="course-pick">
           <div class="seg four" id="courseSeg" role="radiogroup" aria-label="도로 고르기"></div>
-          <p class="gt-sub" id="courseInfo" style="margin:6px 0 0"></p>
-        </div>
+        </div></div>
+        <p class="gt-sub drive-desc">레버와 페달로 움직이는 차를 3D로 봅니다. 도로를 고르면 굽은 길·언덕·서킷을 달립니다(코스에서는 핸들을 자동으로 돌리고, 속도와 변속은 직접). 끌어서 시점을 돌릴 수 있고(휴대폰은 두 손가락), 차를 누르면 변속기 속을 3D로 봅니다.</p>
+        <p class="gt-sub course-info" id="courseInfo"></p>
         <div class="drive-box">
           <div id="box3D"></div>
           <div class="drive-hud num"><div><span>주행 거리</span><b id="dDist">0 m</b></div><div><span>가속도</span><b id="dAcc">0.00 G</b></div><div><span>바퀴</span><b id="dWheel">0 rpm</b></div><div><span>변속기</span><b id="dGear">N · 해제</b></div><div><span>연비</span><b id="dFuel">–</b></div><div id="dTurnBox" hidden><span>회전</span><b id="dTurn"></b></div><div id="dWarnBox" hidden><b id="dWarn" style="color:#ffb37a"></b></div></div>
@@ -55,6 +37,7 @@
 <path d="M-40 6 L-12 6 L-8 16 L8 16 L12 6 L40 6" fill="none" stroke="#2a2c30" stroke-width="9" stroke-linejoin="round"/><path d="M0 16 L0 40" stroke="#2a2c30" stroke-width="9"/>
 <circle r="13" fill="#2a2c30"/><circle r="6" fill="#c8ccd2"/><rect x="-3" y="-49" width="6" height="9" rx="2" fill="#e8590c"/></svg></div>
           <div class="wheel-tag" id="wheelTag">핸들 0°</div>
+          <div class="steer-btns"><button type="button" id="stL" aria-label="왼쪽으로 조향(누르고 있기)">◀</button><button type="button" id="stR" aria-label="오른쪽으로 조향(누르고 있기)">▶</button></div>
           <button class="big-exit full-only" type="button" id="bigExit">✕ 작게 보기</button>
           <div class="full-read full-only num" aria-hidden="true"><b id="fKmh">0</b><span>km/h</span><em id="fGear">N</em><span id="fRpm">800 rpm</span></div>
           <div class="full-ctrl full-only" role="group" aria-label="크게 보기 운전 조작">
@@ -111,6 +94,19 @@
         </div>
       </div>
 
+  </section>
+  <section class="guide" id="guide" aria-label="처음 오셨나요" hidden>
+    <div class="guide-head"><b>처음 오셨나요? 이 순서로 둘러보세요</b><button class="qb" type="button" id="guideClose" style="flex:none;padding:6px 12px;font-size:13px;margin:0">닫기</button></div>
+    <div class="guide-steps">
+      <a href="#drive"><em>1. 운전해 보기</em><b>레버 D, 가속 페달</b><span>계기판과 3D 차로 변속이 언제 일어나는지 느껴 보세요.</span></a>
+      <a href="#trans3d"><em>2. 변속기 속 보기</em><b>단면 3D</b><span>어느 클러치가 물리고 기어가 어떻게 도는지 봅니다. 슬로 모션도 있습니다.</span></a>
+      <a href="#missions"><em>3. 공부하고 도전하기</em><b>운전 과제 · 공부 모드</b><span>배운 내용을 과제와 퀴즈로 확인하세요.</span></a>
+    </div>
+  </section>
+
+  <div class="layout">
+    <div class="stack">
+
       <div class="card" id="trans3d">
         <h2 style="margin:0 0 4px">변속기 단면 3D (실물 근사)</h2>
         <p class="gt-sub">A6 계열 6단 자동변속기의 공개 단면도 배치를 참고해 만든 근사 모델입니다. 비스듬한 이의 헬리컬 기어, 마찰판과 강철판이 번갈아 쌓인 클러치 팩, 절반을 잘라 낸 알루미늄 케이스로 만들었습니다. 앞쪽에는 토크 컨버터, 아래 옆에는 트랜스퍼 기어와 종감속·차동기어가 붙어 있습니다. 잇수와 치수는 공개되지 않아 가상 값이고, 움직임은 아래 원리 모델과 같습니다.</p>
@@ -153,6 +149,15 @@
     </div>
 
     <div class="stack">
+      <div class="cluster">
+        <canvas id="cv" width="960" height="480" role="img" aria-label="RPM 게이지와 속도계. 수치는 아래에 글자로도 나옵니다."></canvas>
+        <div class="readout num">
+          <div><b id="gearTxt">N</b><span>단수</span></div>
+          <div><b id="rpmTxt">800</b><span>rpm</span></div>
+          <div><b id="kmhTxt">0</b><span>km/h</span></div>
+          <div><b id="psTxt">0</b><span>PS</span></div>
+        </div>
+      </div>
       <div class="card controls">
         <fieldset>
           <legend>변속 레버</legend>
@@ -333,8 +338,8 @@
   </div>
 </main>
 
-<script src="js/sim.js"></script>
-<script src="js/course.js"></script>
-<script src="js/app.js"></script>
+<script src="js/sim.js?v=20261020a"></script>
+<script src="js/course.js?v=20261020a"></script>
+<script src="js/app.js?v=20261020a"></script>
 </body>
 </html>

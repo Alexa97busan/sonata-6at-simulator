@@ -191,7 +191,6 @@
   @media (min-width: 1240px) {
     main { max-width: 1320px; } .layout { grid-template-columns: minmax(0, 1fr) 380px; }
     /* 넓은 화면: 주행 3D를 맨 위에 크게, 계기판은 그 아래 */
-    .layout > .stack:first-child > #drive { order: -1; }
   }
   .tc-box { background: var(--canvas); border-radius: 12px; padding: 6px; }
   .acc-row.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -356,3 +355,154 @@
   tr button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .note { margin: 14px 0 0; font-size: 12px; color: var(--ink-2); max-width: 70ch; }
   @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
+
+/* ===================================================================================
+   디자인 레이어(애플 / 조너선 아이브 스타일): 절제된 색, 넉넉한 여백, 시스템 서체, 반투명 내비게이션,
+   알약 모양 버튼. 위의 규칙을 덮어쓴다. 색은 모두 이 토큰을 거친다.
+   =================================================================================== */
+:root {
+  --bg: #f5f5f7; --panel: #ffffff; --ink: #1d1d1f; --ink-2: #6e6e73; --line: #d2d2d7;
+  --fill: rgba(118, 118, 128, .12); --fill-2: rgba(118, 118, 128, .2); --ui: #0071e3; --ui-ink: #ffffff;
+  --accent: #ff6a14; --on: #30a46c; --red: #e5484d; --s2: #3e7bd6; --canvas: #1c1c1e;
+  --seg-thumb: #ffffff; --nav: rgba(245, 245, 247, .76); --hair: rgba(0, 0, 0, .08);
+  --r-lg: 22px; --r-md: 14px; --r-sm: 10px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 28px rgba(0, 0, 0, .06);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro KR", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-d: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000; --panel: #1c1c1e; --ink: #f5f5f7; --ink-2: #a1a1a6; --line: #38383a;
+    --fill: rgba(118, 118, 128, .24); --fill-2: rgba(118, 118, 128, .32); --ui: #2997ff;
+    --accent: #ff7a2e; --on: #3dd68c; --red: #ff6369; --s2: #6aa9e6; --canvas: #101012;
+    --seg-thumb: #636366; --nav: rgba(22, 22, 23, .72); --hair: rgba(255, 255, 255, .1);
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000000; --panel: #1c1c1e; --ink: #f5f5f7; --ink-2: #a1a1a6; --line: #38383a;
+  --fill: rgba(118, 118, 128, .24); --fill-2: rgba(118, 118, 128, .32); --ui: #2997ff;
+  --accent: #ff7a2e; --on: #3dd68c; --red: #ff6369; --s2: #6aa9e6; --canvas: #101012;
+  --seg-thumb: #636366; --nav: rgba(22, 22, 23, .72); --hair: rgba(255, 255, 255, .1); --shadow: none;
+}
+body { font-family: var(--font); letter-spacing: -0.01em; font-feature-settings: "tnum" 0; }
+main { max-width: 1240px; padding: 0 22px 80px; }
+h2, .drive-top h2 { font-family: var(--font-d); font-size: 24px; font-weight: 600; letter-spacing: -0.022em; margin: 0 0 6px; color: var(--ink); }
+
+/* 머리말: 가운데 정렬, 큰 제목 */
+.hero-head { text-align: center; padding: 40px 0 22px; }
+.hero-head .eyebrow { margin: 0 0 6px; font-size: 17px; font-weight: 600; color: var(--accent); letter-spacing: -0.01em; }
+.hero-head h1 { font-family: var(--font-d); font-size: clamp(34px, 5.2vw, 56px); line-height: 1.07; font-weight: 600; letter-spacing: -0.03em; margin: 0; }
+.hero-head p:last-child { margin: 14px auto 0; max-width: 640px; font-size: clamp(16px, 1.6vw, 21px); line-height: 1.45; color: var(--ink-2); }
+
+/* 내비게이션: 화면 위에 붙는 반투명 막대 */
+.secnav { margin: 0 -22px 28px; padding: 10px 22px; justify-content: center; gap: 2px; background: var(--nav);
+  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--hair); }
+.secnav a, .secnav button { font-size: 12.5px; color: var(--ink); opacity: .82; padding: 6px 11px; border-radius: 980px; }
+.secnav a:hover, .secnav button:hover { opacity: 1; background: var(--fill); }
+.secnav button { margin-left: 12px; border: 0; background: var(--fill); opacity: 1; }
+.secnav button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+@media (max-width: 860px) { .secnav { justify-content: flex-start; } }
+
+/* 카드 */
+.card, .guide { background: var(--panel); border-radius: var(--r-lg); padding: 28px; box-shadow: var(--shadow); }
+.layout { gap: 24px; } .stack { gap: 24px; }
+.gt-sub, .hint3, .note { color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+.cluster { border-radius: var(--r-lg); padding: 18px 12px 8px; box-shadow: var(--shadow); }
+.readout b { font-family: var(--font-d); font-weight: 300; }
+
+/* 주행: 페이지 맨 위의 큰 화면 */
+.hero-drive { margin: 0 0 24px; }
+.hero-drive .card { padding: 22px 22px 18px; }
+.drive-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.drive-top h2 { font-size: 28px; margin: 0; }
+.drive-top .course-pick { margin: 0; flex: 0 1 460px; }
+.drive-desc { margin: 6px 0 2px; max-width: 900px; }
+.course-info { margin: 0 0 12px; }
+.hero-drive .drive-box { border-radius: 18px; margin-top: 8px; }
+.hero-drive #box3D { aspect-ratio: 16 / 9; max-height: 74vh; }
+.hero-drive .drive-box.full #box3D { max-height: none; aspect-ratio: auto; height: 100%; }
+.drive-hud { border-radius: 12px; background: rgba(22, 22, 23, .62); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+.course-bar b, .wheel-tag, .full-read, .big-exit, .mini-map { -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+.course-bar b { border-radius: 980px; padding: 6px 12px; background: rgba(22, 22, 23, .62); }
+.mini-map { border-radius: 14px; background: rgba(22, 22, 23, .5); }
+.paint-row { margin-top: 14px; }
+.swatch { width: 26px; height: 26px; border: 0; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+.swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ui); }
+
+/* ◀ ▶ 조향 버튼(핸들 왼쪽) */
+.steer-btns { position: absolute; right: 98px; bottom: 16px; display: flex; gap: 8px; z-index: 3; }
+.steer-btns button { width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(22, 22, 23, .62); color: #fff; font-size: 16px;
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
+.steer-btns button.down { background: rgba(255, 255, 255, .9); color: #111; }
+.drive-box .course-bar { right: 220px; }
+.drive-box.full .steer-btns { right: 186px; bottom: 30px; }
+.drive-box.full .steer-btns button { width: 68px; height: 68px; font-size: 22px; }
+.drive-box.full .course-bar { right: 340px; }
+@media (max-width: 560px) {
+  .steer-btns { right: 76px; bottom: 10px; } .steer-btns button { width: 40px; height: 40px; }
+  .drive-box .course-bar { right: 8px; bottom: 58px; }
+  .drive-box.full .steer-btns { right: 150px; } .drive-box.full .course-bar { right: 8px; bottom: 100px; }
+  .drive-top h2 { font-size: 24px; } .drive-top .course-pick { flex-basis: 100%; }
+}
+
+/* 버튼: 알약 모양. 기본은 옅은 회색, 주요 동작은 파랑 */
+.qb, .btn, .qchip, .gears button, .head-btns .qb { border: 0; background: var(--fill); color: var(--ink); border-radius: 980px; font-weight: 500; }
+.qb { padding: 11px 16px; font-size: 14px; }
+.btn { border-radius: var(--r-md); padding: 14px 12px; }
+.qb:hover, .btn:hover, .qchip:hover:not(:disabled) { background: var(--fill-2); }
+.qb.primary, .qb[aria-pressed="true"], .btn[aria-pressed="true"] { background: var(--ui); color: var(--ui-ink); }
+.qchip { border-radius: var(--r-md); }
+.qchip[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.gears button { border-radius: 12px; }
+.gears button[aria-pressed="true"] { background: var(--ui); color: var(--ui-ink); }
+.btn.down, #brake.down { background: var(--red); color: #fff; }
+button:focus-visible, input:focus-visible, a:focus-visible, .wheel-w:focus-visible { outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--ui) 40%, transparent); }
+
+/* 분할 버튼(세그먼트): 옅은 트랙 + 흰 손잡이 */
+.seg { background: var(--fill); border-radius: 12px; padding: 2px; }
+.seg .ind { top: 2px; bottom: 2px; left: 2px; background: var(--seg-thumb); border-radius: 10px; box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 3px 1px rgba(0, 0, 0, .04); }
+.seg .ind { width: calc((100% - 4px) / 3); } .seg.two .ind { width: calc((100% - 4px) / 2); } .seg.four .ind { width: calc((100% - 4px) / 4); }
+.seg button { color: var(--ink); opacity: .7; font-size: 14px; padding: 8px 4px; }
+.seg button[aria-checked="true"] { opacity: 1; font-weight: 600; }
+
+/* 슬라이더: 가는 회색 줄 + 흰 손잡이(그림자) */
+input[type=range]::-webkit-slider-runnable-track { height: 4px; background: var(--fill-2); border-radius: 2px; }
+input[type=range]::-moz-range-track { height: 4px; background: var(--fill-2); border-radius: 2px; }
+input[type=range]::-webkit-slider-thumb { width: 26px; height: 26px; margin-top: -11px; background: #fff; box-shadow: 0 0.5px 4px rgba(0, 0, 0, .12), 0 6px 13px rgba(0, 0, 0, .12); }
+input[type=range]::-moz-range-thumb { width: 26px; height: 26px; background: #fff; box-shadow: 0 0.5px 4px rgba(0, 0, 0, .12), 0 6px 13px rgba(0, 0, 0, .12); }
+input[type=range]:disabled { opacity: .45; }
+.slider-head { font-size: 13px; } .slider-head b { font-weight: 600; }
+legend { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+
+/* 작은 타일·요소 표 */
+.acc-row div, .log-box, .mis-now, .shift-tl, .guide-steps a, .tc-box, .trans-box { border-radius: var(--r-md); }
+.acc-row div { background: var(--fill); } .log-box { background: var(--fill); }
+.acc-row b { font-family: var(--font-d); font-weight: 500; letter-spacing: -0.02em; }
+.el { border: 0; background: var(--fill); border-radius: 12px; }
+.el.half { background: color-mix(in srgb, var(--on) 18%, transparent); }
+.mis { border: 0; background: var(--fill); border-radius: var(--r-md); }
+.mis:hover { background: var(--fill-2); }
+.guide { margin-bottom: 24px; }
+.guide-steps a { background: var(--fill); }
+.term-pop { border: 0; border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .18); }
+.pedalbar { border: 0; border-radius: 22px; background: var(--nav); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 10px 30px rgba(0, 0, 0, .16); }
+.pb-lever button { border: 0; background: var(--fill); }
+.pb-lever button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+
+/* 넓은 화면: 오른쪽 칸(계기판 + 조작)을 화면에 붙인다 */
+@media (min-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 380px; }
+  .layout > .stack:last-child { top: 64px; max-height: calc(100vh - 80px); }
+}
+@media (min-width: 1240px) { main { max-width: 1240px; } .layout { grid-template-columns: minmax(0, 1fr) 400px; } }
+/* 휴대폰: 계기판과 조작을 주행 화면 바로 아래로 */
+@media (max-width: 859px) {
+  .layout { display: flex; flex-direction: column; }
+  .layout > .stack:last-child { order: -1; }
+  main { padding: 0 14px 130px; } .secnav { margin: 0 -14px 20px; padding: 8px 14px; }
+  .card, .guide { padding: 20px; } .hero-drive .card { padding: 16px 14px 14px; }
+  .hero-head { padding: 36px 0 18px; }
+  .hero-drive #box3D { aspect-ratio: 4 / 3; }
+}
+@media (max-width: 560px) { .drive-tip { place-items: center; padding: 0 12px; } }

@@ -1638,8 +1638,8 @@ function setSteerMode(m) {
 ['steerMode', 'fSteerMode'].forEach(id => { $(id).hidden = true; });               // 직선 도로에서는 늘 직접 핸들
 // 차의 옆 움직임(직접 핸들): e = 차로 가운데에서 오른쪽으로 벗어난 거리(m), h = 도로 방향보다 오른쪽으로 틀어진 각(rad)
 const LAT = { e: 0, h: 0, off: false };
-// 속도 감응 조향: 빠를수록 같은 핸들 각에 바퀴가 덜 꺾인다(60km/h에서 약 절반)
-const steerGain = () => 1 / (1 + Math.pow(Math.abs(sim.v) / 15, 2));
+// 속도 감응 조향: 빠를수록 같은 핸들 각에 바퀴가 덜 꺾인다(36km/h에서 절반, 100km/h에서 약 1/9)
+const steerGain = () => 1 / (1 + Math.pow(Math.abs(sim.v) / 10, 2));
 function roadEdges() {
   const C = COURSE.c;
   return C ? { lo: -(C.def.width / 2 + C.def.lane), hi: C.def.width / 2 - C.def.lane, wall: C.def.kind === 'mountain' ? 1.0 : C.def.kind === 'circuit' ? 9 : 12 } : { lo: -6, hi: 2, wall: 12 };
@@ -1681,6 +1681,14 @@ function updateLateral(dt) {
   const up = () => { if (!d) return; d = null; STEER.drag = false; STEER.keyUsed = true; };
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => w.addEventListener(ev, up));
 })();
+// ◀ ▶ 버튼: 누르고 있는 동안 그쪽으로 핸들을 돌리고, 떼면 가운데로(화살표 키와 같음)
+[['stL', -1], ['stR', 1]].forEach(([id, dir]) => {
+  const b = $(id);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) {}
+    if (COURSE.c && STEER.mode === 'auto') setSteerMode('manual'); STEER.key = dir; STEER.keyUsed = true; b.classList.add('down'); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, () => { if (STEER.key === dir) STEER.key = 0; b.classList.remove('down'); }));
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
 function drawWheel() {
   const deg = STEER.v * 450, wh = $('wheelW');
   wh.firstElementChild.style.transform = `rotate(${deg.toFixed(1)}deg)`; wh.setAttribute('aria-valuenow', Math.round(deg));
@@ -1695,7 +1703,7 @@ function updateSteer(dt) {
     drawWheel(); return;
   }
   steerEl.disabled = false;
-  if (STEER.key) STEER.target = clamp(STEER.target + STEER.key * dt * 0.9, -1, 1);
+  if (STEER.key) STEER.target = clamp(STEER.target + STEER.key * dt * 0.6, -1, 1);
   else if (STEER.keyUsed) STEER.target = Math.abs(STEER.target) < dt * 1.6 ? 0 : STEER.target - Math.sign(STEER.target) * dt * 1.6;   // 키를 놓으면 저절로 가운데로
   if (STEER.key || STEER.keyUsed || STEER.drag) steerEl.value = Math.round(STEER.target * 100);
   if (!STEER.key && STEER.target === 0) STEER.keyUsed = false;
