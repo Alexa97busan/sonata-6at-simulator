@@ -153,9 +153,37 @@
   .stp input { flex: 1; min-width: 0; width: 100%; text-align: center; border: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; padding: 10px 0; }
   .drive-box { position: relative; background: var(--canvas); border-radius: 12px; overflow: hidden; margin-top: 4px; }
   #box3D { aspect-ratio: 16 / 9; }
-  #box3D canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; touch-action: none; }
+  #box3D canvas { display: block; width: 100%; height: 100%; aspect-ratio: auto; touch-action: pan-y; }
   .drive-hud { position: absolute; left: 8px; top: 8px; display: flex; gap: 14px; flex-wrap: wrap; padding: 5px 10px; border-radius: 8px; background: rgba(16,17,19,.72); color: #e9e9ea; font-size: 12px; pointer-events: none; }
   .drive-hud span { color: #8b8e94; margin-right: 4px; }
+  @media (max-width: 560px) {
+    #box3D { aspect-ratio: 4 / 3; }
+    .drive-hud { gap: 2px 10px; font-size: 11px; padding: 4px 8px; }
+    #drive .row2 { flex-wrap: wrap; }
+    #drive .row2 .qb { flex: 1 1 28%; padding: 10px 6px; }
+    #drive .row2 #toTrans { flex-basis: 100%; }
+  }
+  @media (hover: none) { .keys, .drive-tip small { display: none; } }
+  .drive-tip { position: absolute; inset: 0; display: grid; place-items: end center; padding: 0 12px 12px; pointer-events: none; transition: opacity .4s var(--ease); }
+  .drive-tip div { background: rgba(16,17,19,.78); color: #e9e9ea; border-radius: 10px; padding: 10px 16px; text-align: center; font-size: 14px; }
+  .drive-tip small { display: block; color: #8b8e94; font-size: 12px; margin-top: 2px; }
+  .drive-tip.off { opacity: 0; }
+  .box3d canvas, #box3D canvas { touch-action: pan-y; }
+  .acc-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 8px 0 6px; }
+  .acc-row div { background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+  .acc-row span { display: block; font-size: 12px; color: var(--ink-2); }
+  .acc-row b { font-size: 20px; font-weight: 400; letter-spacing: -0.01em; }
+  .acc-row b.run { color: var(--accent); }
+  @media (max-width: 560px) { .acc-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .log-box { position: relative; background: var(--bg); border-radius: 12px; padding: 8px; margin-top: 6px; }
+  #logCv { aspect-ratio: auto; height: 280px; cursor: crosshair; touch-action: pan-y; }
+  .log-tip { position: absolute; top: 8px; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.5; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .log-tip span { color: var(--ink-2); }
+  .log-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  .log-table th, .log-table td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  .log-table th { color: var(--ink-2); font-weight: 400; }
+  .keys { font-size: 12px; color: var(--ink-2); margin: 0; line-height: 1.6; }
+  .keys kbd { font: inherit; font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--bg); color: var(--ink); }
   .lab-msg { min-height: 1.4em; font-size: 12px; color: var(--ink-2); margin: -4px 0 0; }
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .sel { width: 100%; padding: 11px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 15px; }
@@ -213,12 +241,13 @@
 
       <div class="card" id="drive">
         <h2 style="margin:0 0 4px">주행 보기 (3D)</h2>
-        <p class="gt-sub">레버와 페달로 움직이는 차를 3D로 봅니다. 가속하면 차체 앞이 들리고, 브레이크를 밟으면 앞이 숙여집니다. 끌어서 시점을 돌릴 수 있습니다.</p>
+        <p class="gt-sub">레버와 페달로 움직이는 차를 3D로 봅니다. 가속하면 차체 앞이 들리고, 브레이크를 밟으면 앞이 숙여집니다. 끌어서 시점을 돌릴 수 있고(휴대폰은 두 손가락), 차를 누르면 지금 작동 중인 변속기 속을 3D로 봅니다.</p>
         <div class="drive-box">
           <div id="box3D"></div>
-          <div class="drive-hud num"><div><span>주행 거리</span><b id="dDist">0 m</b></div><div><span>가속도</span><b id="dAcc">0.00 G</b></div><div><span>바퀴</span><b id="dWheel">0 rpm</b></div></div>
+          <div class="drive-hud num"><div><span>주행 거리</span><b id="dDist">0 m</b></div><div><span>가속도</span><b id="dAcc">0.00 G</b></div><div><span>바퀴</span><b id="dWheel">0 rpm</b></div><div><span>변속기</span><b id="dGear">N · 해제</b></div></div>
+          <div class="drive-tip" id="driveTip"><div>레버를 D로 놓고 가속 페달을 올려 보세요<small>키보드: <b>D</b> 누른 뒤 <b>↑</b></small></div></div>
         </div>
-        <div class="row2"><button class="qb" type="button" data-dcam="back">뒤에서</button><button class="qb" type="button" data-dcam="side">옆에서</button><button class="qb" type="button" data-dcam="top">위에서</button></div>
+        <div class="row2"><button class="qb" type="button" data-dcam="back">뒤에서</button><button class="qb" type="button" data-dcam="side">옆에서</button><button class="qb" type="button" data-dcam="top">위에서</button><button class="qb" type="button" id="toTrans">변속기 속 보기</button></div>
         <p class="lab-msg" id="msg3D" aria-live="polite" style="margin-top:8px"></p>
       </div>
 
@@ -287,9 +316,28 @@
           <button class="btn" id="release" type="button">가속 놓기</button>
           <button class="btn" id="brake" type="button">브레이크 (누르고 있기)</button>
         </div>
+        <div>
+          <div class="slider-head"><span>도로 경사</span><b class="num" id="gradeLabel">0% 평지</b></div>
+          <input type="range" id="grade" min="-10" max="12" step="1" value="0" aria-label="도로 경사(퍼센트)">
+        </div>
+        <button class="btn" id="sound" type="button" aria-pressed="false">엔진 소리 켜기</button>
+        <p class="keys">키보드: <kbd>↑</kbd> 가속 +10% · <kbd>↓</kbd> 브레이크(누르는 동안) · <kbd>R</kbd><kbd>N</kbd><kbd>D</kbd> 레버 · <kbd>1</kbd>~<kbd>6</kbd> 수동 · <kbd>0</kbd> 자동 · <kbd>S</kbd> 소리</p>
         <div id="msg" aria-live="polite">레버를 D로 놓고 가속 페달을 올려 보세요.</div>
       </div>
     </div>
+  </div>
+
+  <div class="card" id="logCard" style="margin-top:20px">
+    <div class="gt-head"><h2 style="margin:0">주행 기록</h2><button class="qb" type="button" id="logClear" style="flex:0 0 auto;padding:8px 14px;font-size:13px">기록 지우기</button></div>
+    <div class="acc-row num">
+      <div><span>0→100 km/h</span><b id="t100">–</b></div>
+      <div><span>최근 기록</span><b id="t100last">–</b></div>
+      <div><span>최고 기록</span><b id="t100best">–</b></div>
+      <div><span>마지막 변속</span><b id="shiftInfo">–</b></div>
+    </div>
+    <p class="gt-sub" id="t100msg">D에 놓고 멈춘 상태에서 가속 페달을 밟으면 100km/h까지 걸린 시간을 잽니다. 페달을 끝까지(↑ 열 번) 밟아야 최고 기록이 나옵니다.</p>
+    <div class="log-box"><canvas id="logCv" aria-label="최근 60초의 속도, 엔진 rpm, 단수 기록"></canvas><div class="log-tip" id="logTip" hidden></div></div>
+    <details class="teeth-set"><summary>표로 보기 (최근 60초, 5초 간격)</summary><div id="logTable"></div></details>
   </div>
 
   <div class="card" id="lab" style="margin-top:20px">
@@ -391,7 +439,10 @@ const fr = rpm => 14 + 0.004 * rpm;                                  // 엔진 �
 const ratioOf = g => g === 'N' ? 0 : CFG.ratios[g] * CFG.final;
 const rpmAt = (v, g) => Math.abs(v) / CFG.tireR * Math.abs(ratioOf(g)) * 30 / Math.PI;
 const sim = { v: 0, we: CFG.idle * Math.PI / 30, cur: 'N', lever: 'N', manual: null, th: 0, brake: false,
-  lock: false, shift: null, lastShift: -9, t: 0, Teng: 0, msg: '', warn: false };
+  lock: false, shift: null, lastShift: -9, t: 0, Teng: 0, msg: '', warn: false,
+  grade: 0,                  // 도로 경사(오르막 +, 비율. 0.1 = 10%)
+  shiftEvt: null,            // 변속 요소가 물리는 순간 { from, to, n }
+  shiftLog: null };          // 마지막으로 끝난 변속 { from, to, dur, at }
 const say = (m, w) => { sim.msg = m; sim.warn = !!w; return !w; };
 
 function beginShift(to) {
@@ -421,13 +472,16 @@ function tcu() {
   if (sim.lever !== 'D' || sim.manual !== null || sim.shift || typeof sim.cur !== 'number' || sim.v < 0) return;
   if (sim.t - sim.lastShift < 0.8) return;
   const g = sim.cur, R = CFG.ratios, n = rpmAt(sim.v, g), th = sim.th;
+  // 경사 로직: 오르막에서는 늦게 올리고 일찍 내린다. 내리막에서 가속을 놓으면 단수를 붙잡아 엔진 브레이크를 쓰고,
+  // 브레이크를 밟으면 한 단 더 내려 엔진 브레이크를 키운다.
+  const up = clamp(sim.grade / 0.1, 0, 1), down = th < 0.05 ? clamp(-sim.grade / 0.1, 0, 1) : 0;
   if (g < 6) {
     const after = n * R[g + 1] / R[g];
-    if (n > 1700 + th * 3700 && after > 1250) return beginShift(g + 1);
+    if (n > 1700 + th * 3700 + up * 900 + down * 2300 && after > 1250) return beginShift(g + 1);
   }
   if (g > 1) {
     const after = n * R[g - 1] / R[g];
-    if (after < 5600 && n < 950 + th * 1300) return beginShift(g - 1);
+    if (after < 5600 && n < 950 + th * 1300 + up * 700 + (sim.brake ? down * 2200 : 0)) return beginShift(g - 1);
   }
 }
 
@@ -444,8 +498,8 @@ function step(dt) {
   let sf = 1;
   if (sim.shift) {
     const s = sim.shift; s.t += dt; sf = 0.55;
-    if (!s.done && s.t >= s.dur / 2) { sim.cur = s.to; s.done = true; }
-    if (s.t >= s.dur) { sim.shift = null; sim.lastShift = sim.t; }
+    if (!s.done && s.t >= s.dur / 2) { sim.cur = s.to; s.done = true; sim.shiftEvt = { from: s.from, to: s.to, n: (sim.shiftEvt ? sim.shiftEvt.n : 0) + 1 }; }
+    if (s.t >= s.dur) { sim.shift = null; sim.lastShift = sim.t; sim.shiftLog = { from: s.from, to: s.to, dur: s.dur, at: sim.t }; }
   }
   tcu();
   const g = sim.cur, Rt = ratioOf(g), r = CFG.tireR;
@@ -484,13 +538,14 @@ function step(dt) {
 
   const Fb = sim.brake ? 7.5 * CFG.mass : 0;
   const Frr = CRR * CFG.mass * G0;
+  const Fg = -CFG.mass * G0 * Math.sin(Math.atan(sim.grade));          // 경사 방향 중력(오르막이면 뒤로)
   const v = sim.v;
   if (Math.abs(v) < 0.01) {
-    const Fmax = Frr + Fb;
-    sim.v = Math.abs(F) <= Fmax ? 0 : v + (F - Math.sign(F) * Fmax) / Meq * dt;
+    const Fmax = Frr + Fb, Fn = F + Fg;
+    sim.v = Math.abs(Fn) <= Fmax ? 0 : v + (Fn - Math.sign(Fn) * Fmax) / Meq * dt;
   } else {
     const Fres = Frr + 0.5 * RHO * CDA * v * v + Fb;
-    let nv = v + (F - Math.sign(v) * Fres) / Meq * dt;
+    let nv = v + (F + Fg - Math.sign(v) * Fres) / Meq * dt;
     if (nv * v < 0) nv = 0;
     sim.v = nv;
   }
@@ -1053,7 +1108,7 @@ function initView(ctl) {
   const l2 = new T3.DirectionalLight(0xffffff, 0.35); l2.position.set(80, 60, -60); scene.add(l2);
   const group = new T3.Group(); scene.add(group);
   const controls = new T3.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false;
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false; twoFingerTouch(controls);
   controls.addEventListener('change', () => { ctl.camMoved = true; });
   const fadeScene = new T3.Scene(), fadeCam = new T3.OrthographicCamera(-1, 1, 1, -1, 0, 1);   // 잔상용: 이전 화면을 서서히 지우는 판
   const fadeMat = new T3.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, depthTest: false, depthWrite: false,
@@ -1276,11 +1331,32 @@ const ctlR = makeCtl({ name: 'R', seg: 'viewR', cv2: 'cv2R', cv3: 'cv3R', box: '
   key3: () => [PG.Z1, PG.Z2, PG.ZR, PG.Zpl, PG.Zps, PG.nR].join('|'), camD: () => (PG.ZR / 2 + 6) * 3.7,
   build: c => buildRear3D(c), update: (c, o) => updateRear3D(c, o) });
 
+// ---- 휴대폰: 한 손가락은 페이지 스크롤, 두 손가락일 때만 3D 시점을 돌린다 ----
+// OrbitControls(r128)는 touchstart/touchmove에서 스크롤을 막으므로, 바깥 상자에서 한 손가락 터치를 먼저 가로챈다.
+function touchGuard(el) {
+  ['touchstart', 'touchmove'].forEach(t => el.addEventListener(t, e => { if (e.touches.length < 2) e.stopPropagation(); }, { capture: true, passive: true }));
+}
+['box3F', 'box3R', 'lab3d', 'box3D'].forEach(id => touchGuard($(id)));
+function twoFingerTouch(controls) { controls.touches = { ONE: -1, TWO: THREE.TOUCH.DOLLY_ROTATE }; }
+
 // ---- 주행 3D: 차는 제자리에 두고 길과 주변을 뒤로 흘려 보낸다 (차의 앞은 −z) ----
-const drive = { ready: false, loading: false, visible: false, dist: 0, wheel: 0, acc: 0, lastV: 0, pitch: 0, pv: 0, size: 0, props: [], wheels: [] };
+const drive = { ready: false, loading: false, visible: false, dist: 0, wheel: 0, acc: 0, lastV: 0, pitch: 0, pv: 0, size: 0,
+  props: [], wheels: [], tilt: 0, evtN: 0, tipDone: false };
 const DRIVE_CAMS = { back: [-4.5, 2.4, 8.5], side: [-9.5, 1.4, -1], top: [-0.01, 15, 2] };
 function driveCam(name) {
   drive.camera.position.set(...DRIVE_CAMS[name]); drive.controls.target.set(0, 0.7, -1); drive.controls.update();
+}
+// 옆모습 단면(z: 앞 −, y: 위 +)을 폭 방향(x)으로 밀어 만든다
+function sideExtrude(T3, pts, width, arcs) {
+  const sh = new T3.Shape(); sh.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i];
+    if (p === 'arc') { const a = arcs.shift(); sh.lineTo(a[0] - a[2], 0.30); sh.absarc(a[0], a[1], a[2], Math.PI, 0, true); }
+    else sh.lineTo(p[0], p[1]);
+  }
+  const g = new T3.ExtrudeGeometry(sh, { depth: width, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3, curveSegments: 16 });
+  g.translate(0, 0, -width / 2); g.rotateY(-Math.PI / 2);
+  return g;
 }
 function buildDrive() {
   const T3 = THREE, box = $('box3D');
@@ -1292,47 +1368,56 @@ function buildDrive() {
   const camera = new T3.PerspectiveCamera(45, 16 / 9, 0.1, 400);
   scene.add(new T3.HemisphereLight(0xffffff, 0x334455, 0.85));
   const sunL = new T3.DirectionalLight(0xffffff, 0.8); sunL.position.set(-20, 30, 10); scene.add(sunL);
+  const root = new T3.Group(); scene.add(root);                           // 경사만큼 통째로 기울이는 세계
   const std = (color, o) => new T3.MeshStandardMaterial(Object.assign({ color, roughness: 0.7, metalness: 0.1 }, o));
-  const flat = (w, l, mat, x, y) => { const m = new T3.Mesh(new T3.PlaneGeometry(w, l), mat); m.rotation.x = -Math.PI / 2; m.position.set(x, y, 0); scene.add(m); return m; };
+  const flat = (w, l, mat, x, y) => { const m = new T3.Mesh(new T3.PlaneGeometry(w, l), mat); m.rotation.x = -Math.PI / 2; m.position.set(x, y, 0); root.add(m); return m; };
   // 땅과 도로: 차는 오른쪽 차로(x −2~2) 가운데. 중앙선은 x=−2
   flat(400, 400, std(0x1f2b24), 0, 0);
   flat(8.4, 400, std(0x2e3033, { roughness: 0.9 }), -2, 0.01);
   const white = std(0xe9e9ea, { roughness: 0.5 });
   flat(0.15, 400, white, 2.0, 0.02); flat(0.15, 400, white, -6.0, 0.02);
-  const add = (obj, period, count, offset) => { for (let i = 0; i < count; i++) { const o = i === 0 ? obj : obj.clone(); scene.add(o); drive.props.push({ o, base: i * period + (offset || 0), L: period * count }); } };
+  const add = (obj, period, count, offset) => { for (let i = 0; i < count; i++) { const o = i === 0 ? obj : obj.clone(); root.add(o); drive.props.push({ o, base: i * period + (offset || 0), L: period * count }); } };
   const dash = new T3.Mesh(new T3.PlaneGeometry(0.15, 3), std(0xf2c94c, { roughness: 0.5 })); dash.rotation.x = -Math.PI / 2; dash.position.set(-2, 0.02, 0);
   add(dash, 9, 16);
+  // 노면 이음매: 4m마다 지나가 고속에서도 속도감이 남는다
+  const seam = new T3.Mesh(new T3.PlaneGeometry(8.2, 0.14), std(0x232528, { roughness: 1 })); seam.rotation.x = -Math.PI / 2; seam.position.set(-2, 0.015, 0);
+  add(seam, 4, 36);
   // 길가 기둥(반사판)과 나무
   const post = new T3.Group(), pm = std(0xd9dde2);
   const pole = new T3.Mesh(new T3.BoxGeometry(0.12, 1.0, 0.12), pm); pole.position.y = 0.5; post.add(pole);
   const refl = new T3.Mesh(new T3.BoxGeometry(0.13, 0.12, 0.13), std(0xff9f1a, { emissive: 0x663300 })); refl.position.y = 0.9; post.add(refl);
-  post.position.x = 2.8; add(post, 12, 12);
-  const post2 = post.clone(); post2.position.x = -6.8; add(post2, 12, 12, 6);
+  post.position.x = 2.8; add(post, 8, 18);
+  const post2 = post.clone(); post2.position.x = -6.8; add(post2, 8, 18, 4);
   const tree = new T3.Group();
   const trunk = new T3.Mesh(new T3.CylinderGeometry(0.15, 0.2, 1.4, 8), std(0x6b4f3a)); trunk.position.y = 0.7; tree.add(trunk);
   const crown = new T3.Mesh(new T3.ConeGeometry(1.1, 2.6, 10), std(0x2f6b45)); crown.position.y = 2.6; tree.add(crown);
   tree.position.x = 6.5; add(tree, 17, 8);
   const tree2 = tree.clone(); tree2.position.x = -10.5; tree2.scale.setScalar(1.25); add(tree2, 23, 6, 9);
-  // 차: 휠베이스 2.86m, 전장 4.8m, 전폭 1.84m 정도의 단순한 상자 모델
-  const car = new T3.Group(); scene.add(car);
+  // 차: 전장 4.9m, 전폭 1.84m, 휠베이스 2.86m 정도의 세단. 옆모습 단면을 밀어 만든다
+  const car = new T3.Group(); root.add(car);
   const shadow = new T3.Mesh(new T3.PlaneGeometry(2.1, 5.0), new T3.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.03; car.add(shadow);
   const body = new T3.Group(); body.position.y = 0.45; car.add(body);          // 차체 기울기의 회전 중심(차축 높이 근처)
   const paint = std(0xe8590c, { metalness: 0.45, roughness: 0.35 }), glass = std(0x1d2a35, { metalness: 0.6, roughness: 0.15 });
   const part = (geo, mat, x, y, z) => { const m = new T3.Mesh(geo, mat); m.position.set(x, y - 0.45, z); body.add(m); return m; };
-  part(new T3.BoxGeometry(1.84, 0.6, 4.8), paint, 0, 0.66, 0);
-  part(new T3.BoxGeometry(1.62, 0.5, 2.5), glass, 0, 1.2, 0.3);
-  part(new T3.BoxGeometry(1.5, 0.06, 2.1), paint, 0, 1.47, 0.35);
+  const WB = 1.43, AR = 0.42;                                                 // 앞·뒤 차축 위치, 휠 아치 반지름
+  part(sideExtrude(T3, [[-2.40, 0.30], 'arc', 'arc', [2.36, 0.30], [2.42, 0.55], [2.38, 0.80], [2.22, 0.95], [1.70, 0.99], [-0.95, 0.96], [-2.15, 0.83], [-2.42, 0.70], [-2.46, 0.48]],
+    1.74, [[-WB, CFG.tireR, AR], [WB, CFG.tireR, AR]]), paint, 0, 0, 0);
+  part(sideExtrude(T3, [[-0.95, 0.94], [1.72, 0.97], [0.95, 1.40], [-0.15, 1.42]], 1.52, []), glass, 0, 0, 0);       // 유리(앞·뒤 경사)
+  part(sideExtrude(T3, [[-0.10, 1.40], [0.92, 1.38], [0.90, 1.43], [-0.08, 1.45]], 1.42, []), paint, 0, 0, 0);       // 지붕
+  part(new T3.BoxGeometry(1.66, 0.46, 0.08), paint, 0, 1.17, 0.38);                                    // B 필러
+  const mirror = new T3.BoxGeometry(0.2, 0.12, 0.14);
+  [-1.0, 1.0].forEach(x => part(mirror, paint, x, 1.02, -0.8));                                                          // 사이드미러
   const head = std(0xffffff, { emissive: 0xfff4d6, emissiveIntensity: 0.8 });
-  [-0.62, 0.62].forEach(x => part(new T3.BoxGeometry(0.45, 0.13, 0.04), head, x, 0.78, -2.41));
+  [-0.6, 0.6].forEach(x => part(new T3.BoxGeometry(0.42, 0.11, 0.06), head, x, 0.76, -2.44));
   drive.tail = std(0x7a1010, { emissive: 0x550000 }); drive.rev = std(0xdddddd, { emissive: 0x000000 });
-  [-0.66, 0.66].forEach(x => part(new T3.BoxGeometry(0.4, 0.13, 0.04), drive.tail, x, 0.8, 2.41));
-  [-0.32, 0.32].forEach(x => part(new T3.BoxGeometry(0.16, 0.1, 0.04), drive.rev, x, 0.8, 2.41));
+  [-0.62, 0.62].forEach(x => part(new T3.BoxGeometry(0.46, 0.12, 0.06), drive.tail, x, 0.84, 2.43));
+  [-0.28, 0.28].forEach(x => part(new T3.BoxGeometry(0.14, 0.09, 0.06), drive.rev, x, 0.84, 2.43));
   // 바퀴: 반지름 0.334m(215/55R17). 바큇살 두 개로 회전이 보이게 한다
   const tireG = new T3.CylinderGeometry(CFG.tireR, CFG.tireR, 0.22, 28); tireG.rotateZ(Math.PI / 2);
   const rimG = new T3.CylinderGeometry(0.21, 0.21, 0.23, 20); rimG.rotateZ(Math.PI / 2);
   const spokeG = new T3.BoxGeometry(0.24, 0.4, 0.07), tireM = std(0x151515, { roughness: 0.9 }), rimM = std(0xc9ccd1, { metalness: 0.6, roughness: 0.3 }), spokeM = std(0x5a5d62);
-  [[-0.86, -1.43], [0.86, -1.43], [-0.86, 1.43], [0.86, 1.43]].forEach(([x, z]) => {
+  [[-0.82, -WB], [0.82, -WB], [-0.82, WB], [0.82, WB]].forEach(([x, z]) => {
     const w = new T3.Group(); w.position.set(x, CFG.tireR, z);
     w.add(new T3.Mesh(tireG, tireM)); w.add(new T3.Mesh(rimG, rimM));
     const s1 = new T3.Mesh(spokeG, spokeM), s2 = new T3.Mesh(spokeG, spokeM); s2.rotation.x = Math.PI / 2; w.add(s1); w.add(s2);
@@ -1341,9 +1426,25 @@ function buildDrive() {
   const controls = new T3.OrbitControls(camera, renderer.domElement);
   controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.08;
   controls.minDistance = 4; controls.maxDistance = 30; controls.maxPolarAngle = Math.PI / 2 - 0.04;
-  Object.assign(drive, { renderer, scene, camera, controls, body, ready: true });
+  twoFingerTouch(controls);
+  // 차를 누르면(끌지 않고) 변속기 3D로 넘어간다
+  const ray = new T3.Raycaster(), ndc = new T3.Vector2(); let down = null;
+  renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    if (ray.intersectObject(body, true).length || ray.intersectObjects(drive.wheels, true).length) goTrans();
+  });
+  Object.assign(drive, { renderer, scene, camera, controls, body, root, ready: true });
   driveCam('back');
 }
+function goTrans() {
+  if (ctlR.mode !== '3d') [...$('viewR').querySelectorAll('button')].find(b => b.textContent === '3D').click();
+  $('cv2R').closest('.card').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+}
+$('toTrans').addEventListener('click', goTrans);
 async function initDrive() {
   if (drive.ready || drive.loading) return;
   drive.loading = true; $('msg3D').textContent = '3D 엔진을 불러오는 중…';
@@ -1356,16 +1457,30 @@ if ('IntersectionObserver' in window) {
   new IntersectionObserver(es => es.forEach(e => { drive.visible = e.isIntersecting; if (e.isIntersecting) initDrive(); })).observe($('drive'));
 } else { drive.visible = true; initDrive(); }
 document.querySelectorAll('[data-dcam]').forEach(b => b.addEventListener('click', () => { if (drive.ready) driveCam(b.dataset.dcam); }));
+const gName = g => g === 'N' ? 'N' : g === 'R' ? 'R' : g + '단';
 function renderDrive(dt) {
   const v = sim.v, a = dt > 0 ? (v - drive.lastV) / dt : 0;
   drive.lastV = v; drive.dist += v * dt; drive.wheel -= v / CFG.tireR * dt;
   drive.acc += (a - drive.acc) * Math.min(1, dt * 8);
   // 차체 기울기: 가속도에 비례하는 목표각으로 감쇠 스프링처럼 따라간다(앞이 −z이므로 양수면 앞이 들림)
   const target = clamp(drive.acc * 0.012, -0.06, 0.06);
+  // 변속 충격: 요소가 물리는 순간 차체를 한 번 툭 친다(올림은 앞이 숙고, 힘주어 내리면 앞이 들림)
+  const ev = sim.shiftEvt;
+  if (ev && ev.n !== drive.evtN) {
+    drive.evtN = ev.n;
+    const num = typeof ev.from === 'number' && typeof ev.to === 'number';
+    drive.pv += num ? (ev.to > ev.from ? -0.3 : (sim.th > 0.3 ? 0.3 : -0.2)) : -0.18;
+  }
   drive.pv += ((target - drive.pitch) * 90 - drive.pv * 12) * dt; drive.pitch += drive.pv * dt;
+  drive.tilt += (Math.atan(sim.grade) - drive.tilt) * Math.min(1, dt * 3);
+  if (!drive.tipDone && Math.abs(drive.dist) > 2) { drive.tipDone = true; $('driveTip').classList.add('off'); }
   if (!drive.ready || !drive.visible) return;
   const w = Math.round($('box3D').clientWidth);
-  if (w > 0 && w !== drive.size) { drive.size = w; drive.renderer.setSize(w, Math.round(w * 9 / 16), false); }
+  const h = Math.round($('box3D').clientHeight);
+  if (w > 0 && h > 0 && w * 10000 + h !== drive.size) { drive.size = w * 10000 + h; drive.renderer.setSize(w, h, false); drive.camera.aspect = w / h; drive.camera.updateProjectionMatrix(); }
+  const fov = 45 + Math.min(14, Math.abs(v) * 3.6 * 0.07);                   // 빠를수록 시야를 넓혀 속도감을 더한다
+  if (Math.abs(drive.camera.fov - fov) > 0.05) { drive.camera.fov = fov; drive.camera.updateProjectionMatrix(); }
+  drive.root.rotation.x = drive.tilt;
   drive.body.rotation.x = drive.pitch;
   drive.wheels.forEach(m => { m.rotation.x = drive.wheel; });
   drive.props.forEach(p => { const z = ((p.base + drive.dist) % p.L + p.L) % p.L; p.o.position.z = z - (p.L - 20); });
@@ -1375,7 +1490,176 @@ function renderDrive(dt) {
   setText('dDist', d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(2) + ' km');
   setText('dAcc', (drive.acc / G0).toFixed(2) + ' G');
   setText('dWheel', Math.round(Math.abs(v) / CFG.tireR * 30 / Math.PI) + ' rpm');
+  const tg = targetGear(), gl = tg === 'N' ? 'N' : tg === 'R' ? 'R' : (sim.manual ? 'M' : 'D') + tg;
+  const els = lastActive.map(id => EL.find(e => e.id === id).name).join(' + ') || '해제';
+  setText('dGear', gl + ' · ' + els + (sim.shift ? ' (변속 중)' : ''));
   drive.controls.update(); drive.renderer.render(drive.scene, drive.camera);
+}
+
+// ---- 도로 경사 ----
+$('grade').addEventListener('input', e => {
+  const g = +e.target.value; sim.grade = g / 100;
+  $('gradeLabel').textContent = g === 0 ? '0% 평지' : (g > 0 ? '+' + g + '% 오르막' : g + '% 내리막');
+});
+
+// ---- 엔진 소리: 4기통 폭발 주파수(rpm/60×2)의 톱니파 + 반 주파수 사각파를 저역 통과 필터로 다듬는다 ----
+const snd = { ctx: null, on: false };
+function soundToggle() {
+  if (!snd.ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { say('이 브라우저는 소리를 낼 수 없습니다.', true); return; }
+    const c = new AC(), o1 = c.createOscillator(), o2 = c.createOscillator(), g1 = c.createGain(), g2 = c.createGain(), lp = c.createBiquadFilter(), out = c.createGain();
+    o1.type = 'sawtooth'; o2.type = 'square'; g1.gain.value = 0.5; g2.gain.value = 0.3;
+    lp.type = 'lowpass'; lp.Q.value = 1.2; out.gain.value = 0;
+    o1.connect(g1).connect(lp); o2.connect(g2).connect(lp); lp.connect(out).connect(c.destination);
+    o1.start(); o2.start();
+    Object.assign(snd, { ctx: c, o1, o2, lp, out });
+  }
+  snd.on = !snd.on;
+  if (snd.on) snd.ctx.resume();
+  $('sound').textContent = snd.on ? '엔진 소리 끄기' : '엔진 소리 켜기';
+  $('sound').setAttribute('aria-pressed', snd.on);
+}
+$('sound').addEventListener('click', soundToggle);
+document.addEventListener('visibilitychange', () => { if (snd.ctx) (document.hidden ? snd.ctx.suspend() : snd.on && snd.ctx.resume()); });
+function updateSound(rpm) {
+  if (!snd.ctx) return;
+  const t = snd.ctx.currentTime, f = rpm / 60 * 2;
+  snd.o1.frequency.setTargetAtTime(f, t, 0.03); snd.o2.frequency.setTargetAtTime(f / 2, t, 0.03);
+  snd.lp.frequency.setTargetAtTime(250 + rpm * 0.22 + sim.th * 700, t, 0.05);
+  snd.out.gain.setTargetAtTime(snd.on ? 0.05 + 0.09 * sim.th + 0.03 * Math.min(1, rpm / 6500) : 0, t, 0.05);
+}
+
+// ---- 키보드 조작 ----
+function setThrottle(pct) { thEl.value = clamp(pct, 0, 100); thEl.dispatchEvent(new Event('input')); }
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('input, textarea, select, summary')) return;
+  const k = e.code;
+  if (k === 'ArrowUp') setThrottle(+thEl.value + 10);
+  else if (k === 'ArrowDown') { if (!e.repeat) setThrottle(0); setBrake(true); }
+  else if (k === 'KeyR' || k === 'KeyN' || k === 'KeyD') requestLever(k.slice(3));
+  else if (/^Digit[1-6]$/.test(k)) requestManual(+k.slice(5));
+  else if (k === 'Digit0') requestManual(null);
+  else if (k === 'KeyS') soundToggle();
+  else return;
+  e.preventDefault();
+});
+document.addEventListener('keyup', e => { if (e.code === 'ArrowDown') setBrake(false); });
+
+// ---- 0→100km/h 측정 ----
+const LS_KEY = 'sonata6at.t100';
+const t100 = { state: 'idle', ready: false, t0: 0, last: null, best: null };
+try { const b = parseFloat(localStorage.getItem(LS_KEY)); if (b > 0) t100.best = b; } catch (e) {}
+function t100Say(m) { setText('t100msg', m); }
+function updateT100() {
+  const kmh = sim.v * 3.6;
+  if (t100.state === 'idle') {
+    if (sim.lever === 'D' && Math.abs(sim.v) < 0.3) t100.ready = true;
+    if (t100.ready && kmh > 1) { t100.state = 'run'; t100.t0 = sim.t; t100.ready = false; t100Say('측정 중… 100km/h까지 페달을 유지하세요.'); }
+  } else {
+    const el = sim.t - t100.t0;
+    if (kmh >= 100) {
+      t100.state = 'idle'; t100.last = el;
+      const nb = t100.best === null || el < t100.best;
+      if (nb) { t100.best = el; try { localStorage.setItem(LS_KEY, String(el)); } catch (e) {} }
+      t100Say(nb ? '새 최고 기록입니다! 멈춘 뒤 다시 출발하면 또 잽니다.' : '측정 완료. 멈춘 뒤 다시 출발하면 또 잽니다.');
+    } else if (sim.brake || kmh < 0.5 || sim.lever !== 'D') { t100.state = 'idle'; t100Say('측정이 취소되었습니다. 멈춘 뒤 다시 출발하세요.'); }
+  }
+  const f = x => x === null ? '–' : x.toFixed(1) + ' s';
+  setText('t100', t100.state === 'run' ? (sim.t - t100.t0).toFixed(1) + ' s' : '–');
+  $('t100').classList.toggle('run', t100.state === 'run');
+  setText('t100last', f(t100.last)); setText('t100best', f(t100.best));
+  const sl = sim.shiftLog;
+  setText('shiftInfo', sim.shift ? gName(sim.shift.from) + '→' + gName(sim.shift.to) + ' …' : sl ? gName(sl.from) + '→' + gName(sl.to) + ' ' + sl.dur.toFixed(2) + ' s' : '–');
+}
+
+// ---- 주행 기록 그래프: 속도·rpm·단수를 세로로 쌓은 작은 그래프 3개(축 하나씩), 시간축 공유 ----
+const LOG_SEC = 60, LOG_DT = 0.1, LOG_N = LOG_SEC / LOG_DT;
+const log = { buf: [], next: 0, visible: false, hover: null, drawT: 0 };
+const gearNum = g => g === 'N' ? 0 : g === 'R' ? -1 : g;
+function logSample() {
+  if (sim.t < log.next) return;
+  log.next = sim.t + LOG_DT;
+  log.buf.push({ t: sim.t, kmh: Math.abs(sim.v) * 3.6, rpm: sim.we * 30 / Math.PI, g: gearNum(sim.cur) });
+  if (log.buf.length > LOG_N) log.buf.shift();
+}
+$('logClear').addEventListener('click', () => { log.buf = []; t100.last = null; t100.best = null; try { localStorage.removeItem(LS_KEY); } catch (e) {} $('logTable').innerHTML = ''; });
+const logCv = $('logCv'), lc = logCv.getContext('2d');
+if ('IntersectionObserver' in window) new IntersectionObserver(es => es.forEach(e => { log.visible = e.isIntersecting; })).observe(logCv);
+else log.visible = true;
+const LOG_L = 72, LOG_R = 10, LOG_STRIPS = [
+  { key: 'kmh', title: '속도', unit: 'km/h', color: '--accent', max: () => Math.max(60, Math.ceil(Math.max(...log.buf.map(p => p.kmh), 0) / 20) * 20), min: () => 0 },
+  { key: 'rpm', title: '엔진', unit: 'rpm', color: '--s2', max: () => 7000, min: () => 0, ticks: [0, 3500, 7000] },
+  { key: 'g', title: '단수', unit: '', color: '--on', max: () => 6, min: () => -1, ticks: [0, 2, 4, 6], step: true, fmt: x => x === -1 ? 'R' : x === 0 ? 'N' : String(x) }
+];
+function drawLog(now) {
+  if (!log.visible || now - log.drawT < 100) return;
+  log.drawT = now;
+  const dpr = window.devicePixelRatio || 1, W = logCv.clientWidth, H = logCv.clientHeight;
+  if (!W) return;
+  if (logCv.width !== Math.round(W * dpr)) { logCv.width = Math.round(W * dpr); logCv.height = Math.round(H * dpr); }
+  lc.setTransform(dpr, 0, 0, dpr, 0, 0); lc.clearRect(0, 0, W, H);
+  const v = cssv(), ink = v('--ink'), ink2 = v('--ink-2'), line = v('--line');
+  const tNow = sim.t, x = t => LOG_L + (W - LOG_L - LOG_R) * (1 - (tNow - t) / LOG_SEC);
+  const top = 6, axisH = 20, gap = 24, sh = (H - top - axisH - gap * 2) / 3;
+  lc.font = '11px ' + getComputedStyle(document.body).fontFamily; lc.textBaseline = 'middle';
+  LOG_STRIPS.forEach((S, i) => {
+    const y0 = top + i * (sh + gap), lo = S.min(), hi = S.max(), y = val => y0 + sh - (val - lo) / (hi - lo) * sh;
+    const ticks = S.ticks || [0, hi / 2, hi];
+    lc.strokeStyle = line; lc.lineWidth = 1; lc.fillStyle = ink2; lc.textAlign = 'right';
+    ticks.forEach(t => { const yy = Math.round(y(t)) + 0.5; lc.beginPath(); lc.moveTo(LOG_L, yy); lc.lineTo(W - LOG_R, yy); lc.stroke(); lc.fillText(S.fmt ? S.fmt(t) : String(t), LOG_L - 8, yy); });
+    lc.textAlign = 'left'; lc.fillStyle = ink; lc.fillText(S.title, 0, y0 + 6);
+    if (S.unit) { lc.fillStyle = ink2; lc.fillText(S.unit, 0, y0 + 20); }
+    const pts = log.buf; if (pts.length < 2) return;
+    lc.save(); lc.beginPath(); lc.rect(LOG_L, y0 - 2, W - LOG_L - LOG_R, sh + 4); lc.clip();
+    lc.strokeStyle = v(S.color); lc.lineWidth = 2; lc.lineJoin = 'round'; lc.beginPath();
+    pts.forEach((p, j) => {
+      const px = x(p.t), py = y(p[S.key]);
+      if (!j) lc.moveTo(px, py); else if (S.step) { lc.lineTo(px, y(pts[j - 1][S.key])); lc.lineTo(px, py); } else lc.lineTo(px, py);
+    });
+    lc.stroke(); lc.restore();
+  });
+  // 시간축
+  const yA = top + 3 * sh + 2 * gap + 12; lc.fillStyle = ink2; lc.textAlign = 'center';
+  [60, 45, 30, 15, 0].forEach(s => lc.fillText(s ? s + '초 전' : '지금', Math.min(W - 18, x(tNow - s)), yA));
+  // 호버: 세 그래프를 가로지르는 세로선 + 툴팁
+  const tip = $('logTip');
+  if (log.hover !== null && log.buf.length) {
+    const tH = tNow - (1 - (log.hover - LOG_L) / (W - LOG_L - LOG_R)) * LOG_SEC;
+    let best = log.buf[0]; log.buf.forEach(p => { if (Math.abs(p.t - tH) < Math.abs(best.t - tH)) best = p; });
+    const hx = Math.round(x(best.t)) + 0.5;
+    lc.strokeStyle = ink2; lc.lineWidth = 1; lc.beginPath(); lc.moveTo(hx, top); lc.lineTo(hx, top + 3 * sh + 2 * gap); lc.stroke();
+    LOG_STRIPS.forEach((S, i) => { const y0 = top + i * (sh + gap), yy = y0 + sh - (best[S.key] - S.min()) / (S.max() - S.min()) * sh;
+      lc.beginPath(); lc.arc(hx, yy, 4, 0, 7); lc.fillStyle = v(S.color); lc.fill(); lc.lineWidth = 2; lc.strokeStyle = v('--bg'); lc.stroke(); });
+    tip.hidden = false;
+    tip.innerHTML = `<span>${(tNow - best.t).toFixed(1)}초 전</span><br>속도 <b>${Math.round(best.kmh)}</b> km/h<br>엔진 <b>${Math.round(best.rpm / 10) * 10}</b> rpm<br>단수 <b>${LOG_STRIPS[2].fmt(best.g)}</b>`;
+    const tw = tip.offsetWidth; tip.style.left = (hx + 8 + 12 + tw > W ? hx + 8 - tw - 12 : hx + 8 + 12) + 'px';
+  } else tip.hidden = true;
+}
+logCv.addEventListener('pointermove', e => { const r = logCv.getBoundingClientRect(), px = e.clientX - r.left; log.hover = px >= LOG_L ? px : null; });
+logCv.addEventListener('pointerleave', () => { log.hover = null; });
+document.querySelector('#logCard details').addEventListener('toggle', e => {
+  if (!e.target.open) return;
+  const rows = []; for (let s = 0; s <= LOG_SEC; s += 5) { const t = sim.t - s; let best = null; log.buf.forEach(p => { if (!best || Math.abs(p.t - t) < Math.abs(best.t - t)) best = p; }); if (best && Math.abs(best.t - t) < 1) rows.push([s, best]); }
+  $('logTable').innerHTML = rows.length ? '<table class="log-table num"><thead><tr><th>시점</th><th>속도(km/h)</th><th>엔진(rpm)</th><th>단수</th></tr></thead><tbody>' +
+    rows.map(([s, p]) => `<tr><td>${s ? s + '초 전' : '지금'}</td><td>${Math.round(p.kmh)}</td><td>${Math.round(p.rpm / 10) * 10}</td><td>${LOG_STRIPS[2].fmt(p.g)}</td></tr>`).join('') + '</tbody></table>' : '<p class="gt-sub">아직 기록이 없습니다.</p>';
+});
+
+// ---- 계기판: 변속 중 표시 ----
+function drawShiftBadge(c) {
+  const s = sim.shift, sl = sim.shiftLog, recent = sl && sim.t - sl.at < 1.5;
+  if (!s && !recent) return;
+  ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (s) {
+    ctx.fillStyle = c.accent; ctx.font = '500 20px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(gName(s.from) + ' → ' + gName(s.to), 320, 278);
+    ctx.globalAlpha = .35; ctx.fillStyle = c.dim; ctx.fillRect(270, 296, 100, 4);
+    ctx.globalAlpha = 1; ctx.fillStyle = c.accent; ctx.fillRect(270, 296, 100 * Math.min(1, s.t / s.dur), 4);
+  } else {
+    ctx.globalAlpha = 1 - (sim.t - sl.at) / 1.5; ctx.fillStyle = c.ink; ctx.font = '13px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(gName(sl.to) + ' 변속 완료 · ' + sl.dur.toFixed(2) + ' s', 320, 290);
+  }
+  ctx.restore();
 }
 
 function drawLab(dt) {
@@ -1528,6 +1812,7 @@ function frame(now) {
   const c = { ink: '#e9e9ea', dim: '#7d8086', accent: v('--accent'), red: v('--red') };
   dial(160, 165, 140, disp.rpm, 7000, 500, 2, x => String(x / 1000), 6500, 'x1000 rpm', c);
   dial(480, 165, 140, disp.kmh, 240, 10, 4, x => String(x), null, 'km/h', c);
+  drawShiftBadge(c);
 
   const tg = targetGear();
   const gTxt = tg === 'N' ? 'N' : tg === 'R' ? 'R' : (sim.manual ? 'M' : 'D') + tg;
@@ -1567,6 +1852,10 @@ function frame(now) {
   drawQ(dt);
   drawLab(dt);
   renderDrive(dt);
+  updateSound(rpm);
+  updateT100();
+  logSample();
+  drawLog(now);
   updatePathLive(active);
   if (tg !== lastGear) {
     lastGear = tg;
